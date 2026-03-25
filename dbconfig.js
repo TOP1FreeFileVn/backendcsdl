@@ -1,18 +1,24 @@
-require('dotenv').config() 
 const sql = require('mssql');
+const express = require('express');
+const cors = require('cors');
+const config = require('./dbconfig');
 
-const config = {
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  server: process.env.DB_SERVER,
-  database: process.env.DB_NAME,
-  options: {
-    encrypt: true,
-    trustServerCertificate: false
-  },
-  port: 1433  
-};
+const app = express();
+app.use(cors());
+app.use(express.json());
 
-sql.connect(config).then(() => {
-  console.log('Connected!');
-}).catch(err => console.error(err));
+app.get('/api/data', async (req, res) => {
+    try {
+        let pool = await sql.connect(config);
+        let result = await pool.request().query('SELECT * FROM BAO_GOM');
+        res.json(result.recordset);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
