@@ -11,7 +11,9 @@ app.use(express.json());
 async function getPool() {
   return await sql.connect(config);
 }
-
+app.use(cors({
+  origin: 'https://top1freefilevn.github.io'
+}))
 // ==================== LOAI SAN PHAM ====================
 app.get('/api/loaisp', async (req, res) => {
   try {
