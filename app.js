@@ -1,372 +1,99 @@
+require('dotenv').config();
 const sql = require('mssql');
 const express = require('express');
 const cors = require('cors');
-const config = require('./dbconfig');
 
 const app = express();
-app.use(cors());
+app.use(cors()); // Bật CORS cho mọi nguồn
 app.use(express.json());
 
-// ====== HELPER ======
+const dbConfig = {
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    server: process.env.DB_SERVER,
+    database: process.env.DB_NAME,
+    options: { encrypt: true, trustServerCertificate: true },
+    port: 1433
+};
+
 async function getPool() {
-  return await sql.connect(config);
+    return await sql.connect(dbConfig);
 }
-app.use(cors({
-  origin: 'https://top1freefilevn.github.io'
-}))
-// ==================== LOAI SAN PHAM ====================
-app.get('/api/loaisp', async (req, res) => {
-  try {
-    const pool = await getPool();
-    const r = await pool.request().query('SELECT * FROM LOAI_SAN_PHAM');
-    res.json(r.recordset);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
 
-app.post('/api/loaisp', async (req, res) => {
-  try {
-    const { MaLoai, TenLoai } = req.body;
-    const pool = await getPool();
-    await pool.request()
-      .input('MaLoai', MaLoai).input('TenLoai', TenLoai)
-      .query('INSERT INTO LOAI_SAN_PHAM(MaLoai,TenLoai) VALUES(@MaLoai,@TenLoai)');
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
+// ==========================================
+// HÀM HELPER CHUNG ĐỂ RÚT GỌN CODE BACKEND
+// ==========================================
+async function executeQuery(res, query, inputs = []) {
+    try {
+        const pool = await getPool();
+        const request = pool.request();
+        inputs.forEach(input => request.input(input.name, input.value));
+        const result = await request.query(query);
+        res.json(result.recordset || { success: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+}
 
-app.put('/api/loaisp/:id', async (req, res) => {
-  try {
-    const { TenLoai } = req.body;
-    const pool = await getPool();
-    await pool.request()
-      .input('id', req.params.id).input('TenLoai', TenLoai)
-      .query('UPDATE LOAI_SAN_PHAM SET TenLoai=@TenLoai WHERE MaLoai=@id');
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
+// 1. LOẠI SẢN PHẨM
+app.get('/api/loaisp', (req, res) => executeQuery(res, 'SELECT * FROM LOAI_SAN_PHAM'));
+app.post('/api/loaisp', (req, res) => executeQuery(res, 'INSERT INTO LOAI_SAN_PHAM(MaLoai, TenLoai) VALUES(@id, @ten)', [{ name: 'id', value: req.body.MaLoai }, { name: 'ten', value: req.body.TenLoai }]));
+app.put('/api/loaisp/:id', (req, res) => executeQuery(res, 'UPDATE LOAI_SAN_PHAM SET TenLoai=@ten WHERE MaLoai=@id', [{ name: 'id', value: req.params.id }, { name: 'ten', value: req.body.TenLoai }]));
+app.delete('/api/loaisp/:id', (req, res) => executeQuery(res, 'DELETE FROM LOAI_SAN_PHAM WHERE MaLoai=@id', [{ name: 'id', value: req.params.id }]));
 
-app.delete('/api/loaisp/:id', async (req, res) => {
-  try {
-    const pool = await getPool();
-    await pool.request().input('id', req.params.id)
-      .query('DELETE FROM LOAI_SAN_PHAM WHERE MaLoai=@id');
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
+// 2. SẢN PHẨM
+app.get('/api/sanpham', (req, res) => executeQuery(res, 'SELECT * FROM SAN_PHAM'));
+app.post('/api/sanpham', (req, res) => executeQuery(res, 'INSERT INTO SAN_PHAM(MaSP, MoTa, DonGia, Ten, MaLoai) VALUES(@MaSP, @MoTa, @DonGia, @Ten, @MaLoai)', [
+    { name: 'MaSP', value: req.body.MaSP }, { name: 'MoTa', value: req.body.MoTa }, { name: 'DonGia', value: req.body.DonGia }, { name: 'Ten', value: req.body.Ten }, { name: 'MaLoai', value: req.body.MaLoai }
+]));
+app.put('/api/sanpham/:id', (req, res) => executeQuery(res, 'UPDATE SAN_PHAM SET MoTa=@MoTa, DonGia=@DonGia, Ten=@Ten, MaLoai=@MaLoai WHERE MaSP=@id', [
+    { name: 'id', value: req.params.id }, { name: 'MoTa', value: req.body.MoTa }, { name: 'DonGia', value: req.body.DonGia }, { name: 'Ten', value: req.body.Ten }, { name: 'MaLoai', value: req.body.MaLoai }
+]));
+app.delete('/api/sanpham/:id', (req, res) => executeQuery(res, 'DELETE FROM SAN_PHAM WHERE MaSP=@id', [{ name: 'id', value: req.params.id }]));
 
-// ==================== SAN PHAM ====================
-app.get('/api/sanpham', async (req, res) => {
-  try {
-    const pool = await getPool();
-    const r = await pool.request().query('SELECT * FROM SAN_PHAM');
-    res.json(r.recordset);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
+// 3. ĐƠN VỊ CUNG CẤP
+app.get('/api/donvicungcap', (req, res) => executeQuery(res, 'SELECT * FROM DON_VI_CUNG_CAP'));
+app.post('/api/donvicungcap', (req, res) => executeQuery(res, 'INSERT INTO DON_VI_CUNG_CAP(MaDV, Ten, DiaChi) VALUES(@id, @ten, @diachi)', [{ name: 'id', value: req.body.MaDV }, { name: 'ten', value: req.body.Ten }, { name: 'diachi', value: req.body.DiaChi }]));
+app.put('/api/donvicungcap/:id', (req, res) => executeQuery(res, 'UPDATE DON_VI_CUNG_CAP SET Ten=@ten, DiaChi=@diachi WHERE MaDV=@id', [{ name: 'id', value: req.params.id }, { name: 'ten', value: req.body.Ten }, { name: 'diachi', value: req.body.DiaChi }]));
+app.delete('/api/donvicungcap/:id', (req, res) => executeQuery(res, 'DELETE FROM DON_VI_CUNG_CAP WHERE MaDV=@id', [{ name: 'id', value: req.params.id }]));
 
-app.post('/api/sanpham', async (req, res) => {
-  try {
-    const { MaSP, MoTa, DonGia, Ten, MaLoai } = req.body;
-    const pool = await getPool();
-    await pool.request()
-      .input('MaSP', MaSP).input('MoTa', MoTa)
-      .input('DonGia', DonGia).input('Ten', Ten).input('MaLoai', MaLoai)
-      .query('INSERT INTO SAN_PHAM(MaSP,MoTa,DonGia,Ten,MaLoai) VALUES(@MaSP,@MoTa,@DonGia,@Ten,@MaLoai)');
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
+// 4. KHO HÀNG
+app.get('/api/khohang', (req, res) => executeQuery(res, 'SELECT * FROM KHO_HANG'));
+app.post('/api/khohang', (req, res) => executeQuery(res, 'INSERT INTO KHO_HANG(MaKho, DiaChi) VALUES(@id, @diachi)', [{ name: 'id', value: req.body.MaKho }, { name: 'diachi', value: req.body.DiaChi }]));
+app.put('/api/khohang/:id', (req, res) => executeQuery(res, 'UPDATE KHO_HANG SET DiaChi=@diachi WHERE MaKho=@id', [{ name: 'id', value: req.params.id }, { name: 'diachi', value: req.body.DiaChi }]));
+app.delete('/api/khohang/:id', (req, res) => executeQuery(res, 'DELETE FROM KHO_HANG WHERE MaKho=@id', [{ name: 'id', value: req.params.id }]));
 
-app.put('/api/sanpham/:id', async (req, res) => {
-  try {
-    const { MoTa, DonGia, Ten, MaLoai } = req.body;
-    const pool = await getPool();
-    await pool.request()
-      .input('id', req.params.id).input('MoTa', MoTa)
-      .input('DonGia', DonGia).input('Ten', Ten).input('MaLoai', MaLoai)
-      .query('UPDATE SAN_PHAM SET MoTa=@MoTa,DonGia=@DonGia,Ten=@Ten,MaLoai=@MaLoai WHERE MaSP=@id');
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
+// 5. CHI NHÁNH
+app.get('/api/chinhanh', (req, res) => executeQuery(res, 'SELECT * FROM CHI_NHANH'));
+app.post('/api/chinhanh', (req, res) => executeQuery(res, 'INSERT INTO CHI_NHANH(MaCN, Ten, DiaChi) VALUES(@id, @ten, @diachi)', [{ name: 'id', value: req.body.MaCN }, { name: 'ten', value: req.body.Ten }, { name: 'diachi', value: req.body.DiaChi }]));
+app.put('/api/chinhanh/:id', (req, res) => executeQuery(res, 'UPDATE CHI_NHANH SET Ten=@ten, DiaChi=@diachi WHERE MaCN=@id', [{ name: 'id', value: req.params.id }, { name: 'ten', value: req.body.Ten }, { name: 'diachi', value: req.body.DiaChi }]));
+app.delete('/api/chinhanh/:id', (req, res) => executeQuery(res, 'DELETE FROM CHI_NHANH WHERE MaCN=@id', [{ name: 'id', value: req.params.id }]));
 
-app.delete('/api/sanpham/:id', async (req, res) => {
-  try {
-    const pool = await getPool();
-    await pool.request().input('id', req.params.id)
-      .query('DELETE FROM SAN_PHAM WHERE MaSP=@id');
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
+// 6. KHACH HANG
+app.get('/api/khachhang', (req, res) => executeQuery(res, 'SELECT * FROM KHACH_HANG'));
+app.post('/api/khachhang', (req, res) => executeQuery(res, 'INSERT INTO KHACH_HANG(MaKH, Ten, TheTichDiem, Email, SoNha, Phuong, Quan, ThanhPho) VALUES(@MaKH, @Ten, @TheTichDiem, @Email, @SoNha, @Phuong, @Quan, @ThanhPho)', [
+    { name: 'MaKH', value: req.body.MaKH }, { name: 'Ten', value: req.body.Ten }, { name: 'TheTichDiem', value: req.body.TheTichDiem }, { name: 'Email', value: req.body.Email }, { name: 'SoNha', value: req.body.SoNha }, { name: 'Phuong', value: req.body.Phuong }, { name: 'Quan', value: req.body.Quan }, { name: 'ThanhPho', value: req.body.ThanhPho }
+]));
+app.put('/api/khachhang/:id', (req, res) => executeQuery(res, 'UPDATE KHACH_HANG SET Ten=@Ten, TheTichDiem=@TheTichDiem, Email=@Email, SoNha=@SoNha, Phuong=@Phuong, Quan=@Quan, ThanhPho=@ThanhPho WHERE MaKH=@id', [
+    { name: 'id', value: req.params.id }, { name: 'Ten', value: req.body.Ten }, { name: 'TheTichDiem', value: req.body.TheTichDiem }, { name: 'Email', value: req.body.Email }, { name: 'SoNha', value: req.body.SoNha }, { name: 'Phuong', value: req.body.Phuong }, { name: 'Quan', value: req.body.Quan }, { name: 'ThanhPho', value: req.body.ThanhPho }
+]));
+app.delete('/api/khachhang/:id', (req, res) => executeQuery(res, 'DELETE FROM KHACH_HANG WHERE MaKH=@id', [{ name: 'id', value: req.params.id }]));
 
-// ==================== KHACH HANG ====================
-app.get('/api/khachhang', async (req, res) => {
-  try {
-    const pool = await getPool();
-    const r = await pool.request().query('SELECT * FROM KHACH_HANG');
-    res.json(r.recordset);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
+// 7. VỊ TRÍ
+app.get('/api/vitri', (req, res) => executeQuery(res, 'SELECT * FROM VI_TRI'));
+app.post('/api/vitri', (req, res) => executeQuery(res, 'INSERT INTO VI_TRI(MaViTri, LuongTheoGio, TenViTri) VALUES(@id, @luong, @ten)', [{ name: 'id', value: req.body.MaViTri }, { name: 'luong', value: req.body.LuongTheoGio }, { name: 'ten', value: req.body.TenViTri }]));
+app.put('/api/vitri/:id', (req, res) => executeQuery(res, 'UPDATE VI_TRI SET LuongTheoGio=@luong, TenViTri=@ten WHERE MaViTri=@id', [{ name: 'id', value: req.params.id }, { name: 'luong', value: req.body.LuongTheoGio }, { name: 'ten', value: req.body.TenViTri }]));
+app.delete('/api/vitri/:id', (req, res) => executeQuery(res, 'DELETE FROM VI_TRI WHERE MaViTri=@id', [{ name: 'id', value: req.params.id }]));
 
-app.post('/api/khachhang', async (req, res) => {
-  try {
-    const { MaKH, Ten, TheTichDiem, Email, SoNha, Phuong, Quan, ThanhPho } = req.body;
-    const pool = await getPool();
-    await pool.request()
-      .input('MaKH', MaKH).input('Ten', Ten).input('TheTichDiem', TheTichDiem)
-      .input('Email', Email).input('SoNha', SoNha).input('Phuong', Phuong)
-      .input('Quan', Quan).input('ThanhPho', ThanhPho)
-      .query('INSERT INTO KHACH_HANG(MaKH,Ten,TheTichDiem,Email,SoNha,Phuong,Quan,ThanhPho) VALUES(@MaKH,@Ten,@TheTichDiem,@Email,@SoNha,@Phuong,@Quan,@ThanhPho)');
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
+// 8. NHÂN VIÊN
+app.get('/api/nhanvien', (req, res) => executeQuery(res, 'SELECT * FROM NHAN_VIEN'));
+app.post('/api/nhanvien', (req, res) => executeQuery(res, 'INSERT INTO NHAN_VIEN(MaNV, ThoiGianLamViecTrongNgay, HoVaTen, Email, DiaChi, SoDienThoai, MaCN, MaNguoiQuanLy, MaViTri) VALUES(@MaNV, @ThoiGian, @HoVaTen, @Email, @DiaChi, @SDT, @MaCN, @MaNQL, @MaVT)', [
+    { name: 'MaNV', value: req.body.MaNV }, { name: 'ThoiGian', value: req.body.ThoiGianLamViecTrongNgay }, { name: 'HoVaTen', value: req.body.HoVaTen }, { name: 'Email', value: req.body.Email }, { name: 'DiaChi', value: req.body.DiaChi }, { name: 'SDT', value: req.body.SoDienThoai }, { name: 'MaCN', value: req.body.MaCN }, { name: 'MaNQL', value: req.body.MaNguoiQuanLy }, { name: 'MaVT', value: req.body.MaViTri }
+]));
+app.put('/api/nhanvien/:id', (req, res) => executeQuery(res, 'UPDATE NHAN_VIEN SET ThoiGianLamViecTrongNgay=@ThoiGian, HoVaTen=@HoVaTen, Email=@Email, DiaChi=@DiaChi, SoDienThoai=@SDT, MaCN=@MaCN, MaNguoiQuanLy=@MaNQL, MaViTri=@MaVT WHERE MaNV=@id', [
+    { name: 'id', value: req.params.id }, { name: 'ThoiGian', value: req.body.ThoiGianLamViecTrongNgay }, { name: 'HoVaTen', value: req.body.HoVaTen }, { name: 'Email', value: req.body.Email }, { name: 'DiaChi', value: req.body.DiaChi }, { name: 'SDT', value: req.body.SoDienThoai }, { name: 'MaCN', value: req.body.MaCN }, { name: 'MaNQL', value: req.body.MaNguoiQuanLy }, { name: 'MaVT', value: req.body.MaViTri }
+]));
+app.delete('/api/nhanvien/:id', (req, res) => executeQuery(res, 'DELETE FROM NHAN_VIEN WHERE MaNV=@id', [{ name: 'id', value: req.params.id }]));
 
-app.put('/api/khachhang/:id', async (req, res) => {
-  try {
-    const { Ten, TheTichDiem, Email, SoNha, Phuong, Quan, ThanhPho } = req.body;
-    const pool = await getPool();
-    await pool.request()
-      .input('id', req.params.id).input('Ten', Ten).input('TheTichDiem', TheTichDiem)
-      .input('Email', Email).input('SoNha', SoNha).input('Phuong', Phuong)
-      .input('Quan', Quan).input('ThanhPho', ThanhPho)
-      .query('UPDATE KHACH_HANG SET Ten=@Ten,TheTichDiem=@TheTichDiem,Email=@Email,SoNha=@SoNha,Phuong=@Phuong,Quan=@Quan,ThanhPho=@ThanhPho WHERE MaKH=@id');
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.delete('/api/khachhang/:id', async (req, res) => {
-  try {
-    const pool = await getPool();
-    await pool.request().input('id', req.params.id)
-      .query('DELETE FROM KHACH_HANG WHERE MaKH=@id');
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// ==================== CHI NHANH ====================
-app.get('/api/chinhanh', async (req, res) => {
-  try {
-    const pool = await getPool();
-    const r = await pool.request().query('SELECT * FROM CHI_NHANH');
-    res.json(r.recordset);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/chinhanh', async (req, res) => {
-  try {
-    const { MaCN, Ten, DiaChi } = req.body;
-    const pool = await getPool();
-    await pool.request()
-      .input('MaCN', MaCN).input('Ten', Ten).input('DiaChi', DiaChi)
-      .query('INSERT INTO CHI_NHANH(MaCN,Ten,DiaChi) VALUES(@MaCN,@Ten,@DiaChi)');
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.put('/api/chinhanh/:id', async (req, res) => {
-  try {
-    const { Ten, DiaChi } = req.body;
-    const pool = await getPool();
-    await pool.request()
-      .input('id', req.params.id).input('Ten', Ten).input('DiaChi', DiaChi)
-      .query('UPDATE CHI_NHANH SET Ten=@Ten,DiaChi=@DiaChi WHERE MaCN=@id');
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.delete('/api/chinhanh/:id', async (req, res) => {
-  try {
-    const pool = await getPool();
-    await pool.request().input('id', req.params.id)
-      .query('DELETE FROM CHI_NHANH WHERE MaCN=@id');
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// ==================== VI TRI ====================
-app.get('/api/vitri', async (req, res) => {
-  try {
-    const pool = await getPool();
-    const r = await pool.request().query('SELECT * FROM VI_TRI');
-    res.json(r.recordset);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// ==================== NHAN VIEN ====================
-app.get('/api/nhanvien', async (req, res) => {
-  try {
-    const pool = await getPool();
-    const r = await pool.request().query('SELECT * FROM NHAN_VIEN');
-    res.json(r.recordset);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/nhanvien', async (req, res) => {
-  try {
-    const { MaNV, ThoiGianLamViecTrongNgay, HoVaTen, Email, DiaChi, SoDienThoai, MaCN, MaNguoiQuanLy, MaViTri } = req.body;
-    const pool = await getPool();
-    await pool.request()
-      .input('MaNV', MaNV).input('ThoiGianLamViecTrongNgay', ThoiGianLamViecTrongNgay)
-      .input('HoVaTen', HoVaTen).input('Email', Email).input('DiaChi', DiaChi)
-      .input('SoDienThoai', SoDienThoai).input('MaCN', MaCN)
-      .input('MaNguoiQuanLy', MaNguoiQuanLy).input('MaViTri', MaViTri)
-      .query('INSERT INTO NHAN_VIEN(MaNV,ThoiGianLamViecTrongNgay,HoVaTen,Email,DiaChi,SoDienThoai,MaCN,MaNguoiQuanLy,MaViTri) VALUES(@MaNV,@ThoiGianLamViecTrongNgay,@HoVaTen,@Email,@DiaChi,@SoDienThoai,@MaCN,@MaNguoiQuanLy,@MaViTri)');
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.put('/api/nhanvien/:id', async (req, res) => {
-  try {
-    const { ThoiGianLamViecTrongNgay, HoVaTen, Email, DiaChi, SoDienThoai, MaCN, MaNguoiQuanLy, MaViTri } = req.body;
-    const pool = await getPool();
-    await pool.request()
-      .input('id', req.params.id)
-      .input('ThoiGianLamViecTrongNgay', ThoiGianLamViecTrongNgay)
-      .input('HoVaTen', HoVaTen).input('Email', Email).input('DiaChi', DiaChi)
-      .input('SoDienThoai', SoDienThoai).input('MaCN', MaCN)
-      .input('MaNguoiQuanLy', MaNguoiQuanLy).input('MaViTri', MaViTri)
-      .query('UPDATE NHAN_VIEN SET ThoiGianLamViecTrongNgay=@ThoiGianLamViecTrongNgay,HoVaTen=@HoVaTen,Email=@Email,DiaChi=@DiaChi,SoDienThoai=@SoDienThoai,MaCN=@MaCN,MaNguoiQuanLy=@MaNguoiQuanLy,MaViTri=@MaViTri WHERE MaNV=@id');
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.delete('/api/nhanvien/:id', async (req, res) => {
-  try {
-    const pool = await getPool();
-    await pool.request().input('id', req.params.id)
-      .query('DELETE FROM NHAN_VIEN WHERE MaNV=@id');
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// ==================== DON HANG ====================
-app.get('/api/donhang', async (req, res) => {
-  try {
-    const pool = await getPool();
-    const r = await pool.request().query('SELECT * FROM DON_HANG');
-    res.json(r.recordset);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/donhang', async (req, res) => {
-  try {
-    const { MaDonHang, NgayMua, PhuongThucThanhToan, MaKH, MaNV } = req.body;
-    const pool = await getPool();
-    await pool.request()
-      .input('MaDonHang', MaDonHang).input('NgayMua', NgayMua)
-      .input('PhuongThucThanhToan', PhuongThucThanhToan)
-      .input('MaKH', MaKH).input('MaNV', MaNV)
-      .query('INSERT INTO DON_HANG(MaDonHang,NgayMua,PhuongThucThanhToan,MaKH,MaNV) VALUES(@MaDonHang,@NgayMua,@PhuongThucThanhToan,@MaKH,@MaNV)');
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.delete('/api/donhang/:id', async (req, res) => {
-  try {
-    const pool = await getPool();
-    await pool.request().input('id', req.params.id)
-      .query('DELETE FROM DON_HANG WHERE MaDonHang=@id');
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// ==================== NHA CUNG CAP ====================
-app.get('/api/nhacc', async (req, res) => {
-  try {
-    const pool = await getPool();
-    const r = await pool.request().query('SELECT * FROM DON_VI_CUNG_CAP');
-    res.json(r.recordset);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/nhacc', async (req, res) => {
-  try {
-    const { MaDV, Ten, DiaChi } = req.body;
-    const pool = await getPool();
-    await pool.request()
-      .input('MaDV', MaDV).input('Ten', Ten).input('DiaChi', DiaChi)
-      .query('INSERT INTO DON_VI_CUNG_CAP(MaDV,Ten,DiaChi) VALUES(@MaDV,@Ten,@DiaChi)');
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.put('/api/nhacc/:id', async (req, res) => {
-  try {
-    const { Ten, DiaChi } = req.body;
-    const pool = await getPool();
-    await pool.request()
-      .input('id', req.params.id).input('Ten', Ten).input('DiaChi', DiaChi)
-      .query('UPDATE DON_VI_CUNG_CAP SET Ten=@Ten,DiaChi=@DiaChi WHERE MaDV=@id');
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.delete('/api/nhacc/:id', async (req, res) => {
-  try {
-    const pool = await getPool();
-    await pool.request().input('id', req.params.id)
-      .query('DELETE FROM DON_VI_CUNG_CAP WHERE MaDV=@id');
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// ==================== TON KHO ====================
-app.get('/api/tonkho', async (req, res) => {
-  try {
-    const pool = await getPool();
-    const r = await pool.request().query('SELECT * FROM TON_KHO');
-    res.json(r.recordset);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/tonkho', async (req, res) => {
-  try {
-    const { MaSP, MaKho, SoLuong, ViTriHang, ViTriKhu } = req.body;
-    const pool = await getPool();
-    await pool.request()
-      .input('MaSP', MaSP).input('MaKho', MaKho).input('SoLuong', SoLuong)
-      .input('ViTriHang', ViTriHang).input('ViTriKhu', ViTriKhu)
-      .query('INSERT INTO TON_KHO(SoLuong,ViTriHang,ViTriKhu,MaSP,MaKho) VALUES(@SoLuong,@ViTriHang,@ViTriKhu,@MaSP,@MaKho)');
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.delete('/api/tonkho/:maSP/:maKho', async (req, res) => {
-  try {
-    const pool = await getPool();
-    await pool.request()
-      .input('maSP', req.params.maSP).input('maKho', req.params.maKho)
-      .query('DELETE FROM TON_KHO WHERE MaSP=@maSP AND MaKho=@maKho');
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// ==================== PHIEU NHAP HANG ====================
-app.get('/api/phieunhap', async (req, res) => {
-  try {
-    const pool = await getPool();
-    const r = await pool.request().query('SELECT * FROM PHIEU_NHAP_HANG');
-    res.json(r.recordset);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.post('/api/phieunhap', async (req, res) => {
-  try {
-    const { MaPhieu, NgayNhap } = req.body;
-    const pool = await getPool();
-    await pool.request()
-      .input('MaPhieu', MaPhieu).input('NgayNhap', NgayNhap)
-      .query('INSERT INTO PHIEU_NHAP_HANG(MaPhieu,NgayNhap) VALUES(@MaPhieu,@NgayNhap)');
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.delete('/api/phieunhap/:id', async (req, res) => {
-  try {
-    const pool = await getPool();
-    await pool.request().input('id', req.params.id)
-      .query('DELETE FROM PHIEU_NHAP_HANG WHERE MaPhieu=@id');
-    res.json({ success: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// ==================== START SERVER ====================
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Server chạy tại port ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Server đang chạy tại port ${PORT}`));
