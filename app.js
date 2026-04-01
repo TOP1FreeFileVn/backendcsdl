@@ -69,7 +69,7 @@ app.post('/api/chinhanh', (req, res) => executeQuery(res, 'INSERT INTO CHI_NHANH
 app.put('/api/chinhanh/:id', (req, res) => executeQuery(res, 'UPDATE CHI_NHANH SET Ten=@ten, DiaChi=@diachi WHERE MaCN=@id', [{ name: 'id', value: req.params.id }, { name: 'ten', value: req.body.Ten }, { name: 'diachi', value: req.body.DiaChi }]));
 app.delete('/api/chinhanh/:id', (req, res) => executeQuery(res, 'DELETE FROM CHI_NHANH WHERE MaCN=@id', [{ name: 'id', value: req.params.id }]));
 
-// 6. KHACH HANG
+// 6. KHÁCH HÀNG
 app.get('/api/khachhang', (req, res) => executeQuery(res, 'SELECT * FROM KHACH_HANG'));
 app.post('/api/khachhang', (req, res) => executeQuery(res, 'INSERT INTO KHACH_HANG(MaKH, Ten, TheTichDiem, Email, SoNha, Phuong, Quan, ThanhPho) VALUES(@MaKH, @Ten, @TheTichDiem, @Email, @SoNha, @Phuong, @Quan, @ThanhPho)', [
     { name: 'MaKH', value: req.body.MaKH }, { name: 'Ten', value: req.body.Ten }, { name: 'TheTichDiem', value: req.body.TheTichDiem }, { name: 'Email', value: req.body.Email }, { name: 'SoNha', value: req.body.SoNha }, { name: 'Phuong', value: req.body.Phuong }, { name: 'Quan', value: req.body.Quan }, { name: 'ThanhPho', value: req.body.ThanhPho }
@@ -94,10 +94,15 @@ app.put('/api/nhanvien/:id', (req, res) => executeQuery(res, 'UPDATE NHAN_VIEN S
     { name: 'id', value: req.params.id }, { name: 'ThoiGian', value: req.body.ThoiGianLamViecTrongNgay }, { name: 'HoVaTen', value: req.body.HoVaTen }, { name: 'Email', value: req.body.Email }, { name: 'DiaChi', value: req.body.DiaChi }, { name: 'SDT', value: req.body.SoDienThoai }, { name: 'MaCN', value: req.body.MaCN }, { name: 'MaNQL', value: req.body.MaNguoiQuanLy }, { name: 'MaVT', value: req.body.MaViTri }
 ]));
 app.delete('/api/nhanvien/:id', (req, res) => executeQuery(res, 'DELETE FROM NHAN_VIEN WHERE MaNV=@id', [{ name: 'id', value: req.params.id }]));
-// 9. QUẢN LÝ ĐƠN HÀNG (Tạo đơn và chi tiết đơn)
+
+
+// ==========================================
+// 9. QUẢN LÝ ĐƠN HÀNG
+// ==========================================
+app.get('/api/donhang', (req, res) => executeQuery(res, 'SELECT * FROM DON_HANG'));
+
 app.post('/api/donhang', async (req, res) => {
     const { MaDonHang, NgayMua, PhuongThucThanhToan, MaKH, MaNV, ChiTiet } = req.body;
-    // Lưu ý: Trong thực tế nên dùng TRANSACTION để đảm bảo lưu cả đơn và chi tiết cùng lúc
     try {
         const pool = await getPool();
         // 1. Chèn vào bảng DON_HANG
@@ -109,15 +114,17 @@ app.post('/api/donhang', async (req, res) => {
             .input('manv', MaNV)
             .query('INSERT INTO DON_HANG VALUES(@id, @ngay, @pttt, @makh, @manv)');
 
-        // 2. Chèn vào bảng BAO_GOM (Chi tiết đơn hàng)
-        for (let item of ChiTiet) {
-            await pool.request()
-                .input('idDon', MaDonHang)
-                .input('idSP', item.MaSP)
-                .input('giaVon', item.GiaVonTrungBinh)
-                .input('sl', item.SoLuongMua)
-                .input('giaBan', item.DonGiaBan)
-                .query('INSERT INTO BAO_GOM VALUES(@giaVon, @sl, @giaBan, @idDon, @idSP)');
+        // 2. Chèn vào bảng BAO_GOM (Chi tiết đơn hàng) - Chỉ chạy nếu có dữ liệu ChiTiet
+        if (ChiTiet && Array.isArray(ChiTiet)) {
+            for (let item of ChiTiet) {
+                await pool.request()
+                    .input('idDon', MaDonHang)
+                    .input('idSP', item.MaSP)
+                    .input('giaVon', item.GiaVonTrungBinh)
+                    .input('sl', item.SoLuongMua)
+                    .input('giaBan', item.DonGiaBan)
+                    .query('INSERT INTO BAO_GOM VALUES(@giaVon, @sl, @giaBan, @idDon, @idSP)');
+            }
         }
         res.json({ success: true, message: "Tạo đơn hàng thành công" });
     } catch (e) {
@@ -125,23 +132,70 @@ app.post('/api/donhang', async (req, res) => {
     }
 });
 
+app.delete('/api/donhang/:id', async (req, res) => {
+    try {
+        const pool = await getPool();
+        // Phải xóa chi tiết đơn hàng trong bảng BAO_GOM trước để tránh lỗi khóa ngoại
+        await pool.request()
+            .input('id', req.params.id)
+            .query('DELETE FROM BAO_GOM WHERE MaDonHang = @id');
+            
+        // Sau đó mới xóa đơn hàng trong bảng DON_HANG
+        await pool.request()
+            .input('id', req.params.id)
+            .query('DELETE FROM DON_HANG WHERE MaDonHang = @id');
+            
+        res.json({ success: true, message: "Đã xóa đơn hàng" });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+
+// ==========================================
 // 10. QUẢN LÝ TỒN KHO
+// ==========================================
+// Lấy toàn bộ danh sách tồn kho (dùng cho bảng hiển thị trên Frontend)
+app.get('/api/tonkho', (req, res) => executeQuery(res, 'SELECT * FROM TON_KHO'));
+
+// Lấy tồn kho theo sản phẩm cụ thể
 app.get('/api/tonkho/:maSP', (req, res) => {
     executeQuery(res, 'SELECT * FROM TON_KHO WHERE MaSP = @maSP', [{ name: 'maSP', value: req.params.maSP }]);
 });
 
-// Cập nhật vị trí hoặc số lượng thủ công trong kho
-app.put('/api/tonkho', (req, res) => {
+// Thêm mới tồn kho
+app.post('/api/tonkho', (req, res) => {
+    executeQuery(res, 
+        'INSERT INTO TON_KHO(MaKho, MaSP, SoLuong, ViTriHang, ViTriKhu) VALUES(@kho, @sp, @sl, @vt, @khu)', 
+        [
+            { name: 'kho', value: req.body.MaKho },
+            { name: 'sp', value: req.body.MaSP },
+            { name: 'sl', value: req.body.SoLuong },
+            { name: 'vt', value: req.body.ViTriHang },
+            { name: 'khu', value: req.body.ViTriKhu }
+        ]
+    );
+});
+
+// Cập nhật thông tin tồn kho
+app.put('/api/tonkho/:id', (req, res) => {
     executeQuery(res, 
         'UPDATE TON_KHO SET SoLuong=@sl, ViTriHang=@vt, ViTriKhu=@khu WHERE MaSP=@sp AND MaKho=@kho', 
         [
             { name: 'sl', value: req.body.SoLuong },
             { name: 'vt', value: req.body.ViTriHang },
             { name: 'khu', value: req.body.ViTriKhu },
-            { name: 'sp', value: req.body.MaSP },
-            { name: 'kho', value: req.body.MaKho }
+            { name: 'sp', value: req.params.id },
+            { name: 'kho', value: req.body.MaKho } // Lưu ý: Vì khóa chính là 복 hợp, ta cần lấy cả MaKho từ body
         ]
     );
 });
+
+// Xóa tồn kho (Xóa theo MaSP dựa theo cấu hình frontend)
+app.delete('/api/tonkho/:id', (req, res) => {
+    executeQuery(res, 'DELETE FROM TON_KHO WHERE MaSP=@id', [{ name: 'id', value: req.params.id }]);
+});
+
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Server đang chạy tại port ${PORT}`));
