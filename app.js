@@ -29,6 +29,7 @@ async function executeQuery(res, query, inputs = []) {
         const request = pool.request();
         
         inputs.forEach(input => {
+            // [SỬA LỖI FONT]: Tự động nhận diện chuỗi (string) và ép kiểu sang NVARCHAR
             if (typeof input.value === 'string') {
                 request.input(input.name, sql.NVarChar, input.value);
             } else {
@@ -44,12 +45,15 @@ async function executeQuery(res, query, inputs = []) {
 }
 
 // ==========================================
-// HÀM HELPER: TỰ ĐỘNG SINH MÃ
+// HÀM HELPER: TỰ ĐỘNG SINH MÃ (AUTO-GENERATE ID)
 // ==========================================
 async function generateId(tableName, idColumn, prefix) {
     const pool = await getPool();
     const result = await pool.request().query(`
-        SELECT TOP 1 ${idColumn} AS maxId FROM ${tableName} WHERE ${idColumn} LIKE '${prefix}%' ORDER BY ${idColumn} DESC
+        SELECT TOP 1 ${idColumn} AS maxId 
+        FROM ${tableName} 
+        WHERE ${idColumn} LIKE '${prefix}%' 
+        ORDER BY ${idColumn} DESC
     `);
     if (result.recordset.length === 0) return prefix + '001';
     const lastId = result.recordset[0].maxId;
@@ -67,7 +71,10 @@ async function generateOrderId() {
 
     const pool = await getPool();
     const result = await pool.request().query(`
-        SELECT TOP 1 MaDonHang AS maxId FROM DON_HANG WHERE MaDonHang LIKE '${prefix}%' ORDER BY MaDonHang DESC
+        SELECT TOP 1 MaDonHang AS maxId 
+        FROM DON_HANG 
+        WHERE MaDonHang LIKE '${prefix}%' 
+        ORDER BY MaDonHang DESC
     `);
     if (result.recordset.length === 0) return prefix + '001';
     const lastId = result.recordset[0].maxId;
@@ -119,7 +126,7 @@ app.get('/api/check-payment/:id', (req, res) => {
 });
 
 // ==========================================
-// API CRUD DANH MỤC (Giữ nguyên)
+// API ENDPOINTS (DANH MỤC)
 // ==========================================
 app.get('/api/loaisp', (req, res) => executeQuery(res, 'SELECT * FROM LOAI_SAN_PHAM'));
 app.post('/api/loaisp', async (req, res) => {
@@ -178,7 +185,7 @@ app.put('/api/nhanvien/:id', (req, res) => executeQuery(res, 'UPDATE NHAN_VIEN S
 app.delete('/api/nhanvien/:id', (req, res) => executeQuery(res, 'DELETE FROM NHAN_VIEN WHERE MaNV=@id', [{ name: 'id', value: req.params.id }]));
 
 // ==========================================
-// QUẢN LÝ ĐƠN HÀNG 
+// 9. QUẢN LÝ ĐƠN HÀNG (CÓ TRANSACTION + TRỪ KHO)
 // ==========================================
 app.get('/api/donhang', (req, res) => executeQuery(res, 'SELECT * FROM DON_HANG'));
 
@@ -192,7 +199,6 @@ app.post('/api/donhang', async (req, res) => {
     let transaction;
     try {
         const pool = await getPool();
-        // Nếu Frontend truyền mã đơn (do đã xin trước đó) thì dùng luôn, nếu không thì tự tạo
         const newMaDonHang = MaDonHang || await generateOrderId();
 
         transaction = new sql.Transaction(pool);
@@ -252,7 +258,7 @@ app.delete('/api/donhang/:id', async (req, res) => {
 });
 
 // ==========================================
-// TỒN KHO & POS
+// 10. TỒN KHO & POS
 // ==========================================
 app.get('/api/tonkho', (req, res) => executeQuery(res, 'SELECT * FROM TON_KHO'));
 app.get('/api/pos/sanpham', (req, res) => {
@@ -270,24 +276,33 @@ app.put('/api/tonkho/:id', (req, res) => executeQuery(res, 'UPDATE TON_KHO SET S
 app.delete('/api/tonkho/:id', (req, res) => executeQuery(res, 'DELETE FROM TON_KHO WHERE MaSP=@id', [{ name: 'id', value: req.params.id }]));
 
 // ==========================================
-// THỐNG KÊ (DASHBOARD)
+// 11. THỐNG KÊ (DASHBOARD) - TẤT CẢ CHI NHÁNH & THÀNH PHỐ
 // ==========================================
 app.get('/api/thongke', async (req, res) => {
     try {
         const pool = await getPool();
-        const q1 = await pool.request().query(`SELECT ISNULL(SUM(SoLuongMua * DonGiaBan), 0) AS TongDoanhThu, COUNT(DISTINCT MaDonHang) AS TongDonHang FROM BAO_GOM`);
+        const q1 = await pool.request().query(`
+            SELECT ISNULL(SUM(SoLuongMua * DonGiaBan), 0) AS TongDoanhThu, COUNT(DISTINCT MaDonHang) AS TongDonHang FROM BAO_GOM
+        `);
         const q2 = await pool.request().query(`
             SELECT CN.Ten AS ChiNhanh, ISNULL(SUM(BG.SoLuongMua * BG.DonGiaBan), 0) AS DoanhThu
-            FROM BAO_GOM BG JOIN DON_HANG DH ON BG.MaDonHang = DH.MaDonHang JOIN NHAN_VIEN NV ON DH.MaNV = NV.MaNV JOIN CHI_NHANH CN ON NV.MaCN = CN.MaCN
+            FROM BAO_GOM BG
+            JOIN DON_HANG DH ON BG.MaDonHang = DH.MaDonHang
+            JOIN NHAN_VIEN NV ON DH.MaNV = NV.MaNV
+            JOIN CHI_NHANH CN ON NV.MaCN = CN.MaCN
             GROUP BY CN.Ten ORDER BY DoanhThu DESC
         `);
         const q3 = await pool.request().query(`
             SELECT KH.ThanhPho, ISNULL(SUM(BG.SoLuongMua * BG.DonGiaBan), 0) AS DoanhThu, COUNT(DISTINCT DH.MaDonHang) AS SoDon
-            FROM BAO_GOM BG JOIN DON_HANG DH ON BG.MaDonHang = DH.MaDonHang JOIN KHACH_HANG KH ON DH.MaKH = KH.MaKH
+            FROM BAO_GOM BG
+            JOIN DON_HANG DH ON BG.MaDonHang = DH.MaDonHang
+            JOIN KHACH_HANG KH ON DH.MaKH = KH.MaKH
             GROUP BY KH.ThanhPho ORDER BY DoanhThu DESC
         `);
         res.json({ tongDoanhThu: q1.recordset[0].TongDoanhThu, tongDonHang: q1.recordset[0].TongDonHang, chiNhanh: q2.recordset, thanhPho: q3.recordset });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 const PORT = process.env.PORT || 3000;
