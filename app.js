@@ -307,22 +307,27 @@ app.delete('/api/tonkho/:id', (req, res) => {
 // ==========================================
 // 11. THỐNG KÊ (DASHBOARD)
 // ==========================================
+// ==========================================
+// 11. THỐNG KÊ (DASHBOARD) - TẤT CẢ CHI NHÁNH & THÀNH PHỐ
+// ==========================================
 app.get('/api/thongke', async (req, res) => {
     try {
         const pool = await getPool();
         const q1 = await pool.request().query(`
             SELECT ISNULL(SUM(SoLuongMua * DonGiaBan), 0) AS TongDoanhThu, COUNT(DISTINCT MaDonHang) AS TongDonHang FROM BAO_GOM
         `);
+        // ĐÃ BỎ "TOP 5" Ở ĐÂY
         const q2 = await pool.request().query(`
-            SELECT TOP 5 CN.Ten AS ChiNhanh, ISNULL(SUM(BG.SoLuongMua * BG.DonGiaBan), 0) AS DoanhThu
+            SELECT CN.Ten AS ChiNhanh, ISNULL(SUM(BG.SoLuongMua * BG.DonGiaBan), 0) AS DoanhThu
             FROM BAO_GOM BG
             JOIN DON_HANG DH ON BG.MaDonHang = DH.MaDonHang
             JOIN NHAN_VIEN NV ON DH.MaNV = NV.MaNV
             JOIN CHI_NHANH CN ON NV.MaCN = CN.MaCN
             GROUP BY CN.Ten ORDER BY DoanhThu DESC
         `);
+        // ĐÃ BỎ "TOP 5" Ở ĐÂY
         const q3 = await pool.request().query(`
-            SELECT TOP 5 KH.ThanhPho, ISNULL(SUM(BG.SoLuongMua * BG.DonGiaBan), 0) AS DoanhThu, COUNT(DISTINCT DH.MaDonHang) AS SoDon
+            SELECT KH.ThanhPho, ISNULL(SUM(BG.SoLuongMua * BG.DonGiaBan), 0) AS DoanhThu, COUNT(DISTINCT DH.MaDonHang) AS SoDon
             FROM BAO_GOM BG
             JOIN DON_HANG DH ON BG.MaDonHang = DH.MaDonHang
             JOIN KHACH_HANG KH ON DH.MaKH = KH.MaKH
