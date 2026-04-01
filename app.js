@@ -282,6 +282,56 @@ app.put('/api/tonkho/:id', (req, res) => {
 app.delete('/api/tonkho/:id', (req, res) => {
     executeQuery(res, 'DELETE FROM TON_KHO WHERE MaSP=@id', [{ name: 'id', value: req.params.id }]);
 });
+// ==========================================
+// 11. THỐNG KÊ (DASHBOARD)
+// ==========================================
+app.get('/api/thongke', async (req, res) => {
+    try {
+        const pool = await getPool();
 
+        // 1. Tổng doanh thu & Tổng số đơn hàng đã bán
+        const q1 = await pool.request().query(`
+            SELECT 
+                ISNULL(SUM(SoLuongMua * DonGiaBan), 0) AS TongDoanhThu,
+                COUNT(DISTINCT MaDonHang) AS TongDonHang
+            FROM BAO_GOM
+        `);
+
+        // 2. Top 5 chi nhánh có doanh thu cao nhất
+        const q2 = await pool.request().query(`
+            SELECT TOP 5 
+                CN.Ten AS ChiNhanh, 
+                ISNULL(SUM(BG.SoLuongMua * BG.DonGiaBan), 0) AS DoanhThu
+            FROM BAO_GOM BG
+            JOIN DON_HANG DH ON BG.MaDonHang = DH.MaDonHang
+            JOIN NHAN_VIEN NV ON DH.MaNV = NV.MaNV
+            JOIN CHI_NHANH CN ON NV.MaCN = CN.MaCN
+            GROUP BY CN.Ten
+            ORDER BY DoanhThu DESC
+        `);
+
+        // 3. Top 5 thành phố khách hàng mua nhiều nhất
+        const q3 = await pool.request().query(`
+            SELECT TOP 5 
+                KH.ThanhPho, 
+                ISNULL(SUM(BG.SoLuongMua * BG.DonGiaBan), 0) AS DoanhThu, 
+                COUNT(DISTINCT DH.MaDonHang) AS SoDon
+            FROM BAO_GOM BG
+            JOIN DON_HANG DH ON BG.MaDonHang = DH.MaDonHang
+            JOIN KHACH_HANG KH ON DH.MaKH = KH.MaKH
+            GROUP BY KH.ThanhPho
+            ORDER BY DoanhThu DESC
+        `);
+
+        res.json({
+            tongDoanhThu: q1.recordset[0].TongDoanhThu,
+            tongDonHang: q1.recordset[0].TongDonHang,
+            chiNhanh: q2.recordset,
+            thanhPho: q3.recordset
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Server đang chạy tại port ${PORT}`));
