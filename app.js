@@ -97,16 +97,23 @@ app.get('/api/donhang/generate-id', async (req, res) => {
 });
 
 // API 2: SePay sẽ gọi vào đây khi có tiền
+// API 2: SePay sẽ gọi vào đây khi có tiền
 app.post('/api/webhook/sepay', async (req, res) => {
     try {
         const data = req.body;
         console.log("💰 [SEPAY] CÓ TIỀN VÀO:", data.transferAmount, "đ | Nội dung:", data.content);
         
-        // Tìm mã đơn hàng (VD: DH260401-001) trong nội dung chuyển khoản
-        const match = data.content.match(/DH\d{6}-\d{3}/i); 
+        // Thêm dấu ? sau dấu gạch ngang để báo hiệu: Có hay không có gạch ngang đều nhận diện được
+        const match = data.content.match(/DH\d{6}-?\d{3}/i); 
         if (match) {
-            const maDon = match[0].toUpperCase();
-            paidOrders.add(maDon); // Nhét vào bộ nhớ tạm: Đơn này đã trả tiền!
+            let maDon = match[0].toUpperCase();
+            
+            // Nếu ngân hàng (như MB Bank) xóa mất dấu '-', ta tự động chèn lại vào đúng vị trí
+            if (!maDon.includes('-')) {
+                maDon = maDon.slice(0, 8) + '-' + maDon.slice(8);
+            }
+
+            paidOrders.add(maDon); // Nhét vào bộ nhớ tạm mã đã nối lại cho chuẩn
             console.log("✅ [SEPAY] Đã chốt tự động cho đơn:", maDon);
         }
         res.status(200).json({ success: true });
