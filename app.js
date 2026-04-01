@@ -218,7 +218,7 @@ app.post('/api/donhang', async (req, res) => {
             const nvInfo = await reqNV
                 .input('manv', sql.VarChar, MaNV)
                 .query(`
-                    SELECT CN.DiaChi, CN.ThanhPho 
+                    SELECT CN.DiaChi
                     FROM NHAN_VIEN NV 
                     JOIN CHI_NHANH CN ON NV.MaCN = CN.MaCN 
                     WHERE NV.MaNV = @manv
