@@ -38,31 +38,21 @@ async function executeQuery(res, query, inputs = []) {
 // ==========================================
 // HÀM HELPER: TỰ ĐỘNG SINH MÃ (AUTO-GENERATE ID)
 // ==========================================
-
-// 1. Sinh mã cho danh mục (VD: SP001, KH001)
 async function generateId(tableName, idColumn, prefix) {
     const pool = await getPool();
-    // Lấy mã lớn nhất hiện tại (có chứa tiền tố)
     const result = await pool.request().query(`
         SELECT TOP 1 ${idColumn} AS maxId 
         FROM ${tableName} 
         WHERE ${idColumn} LIKE '${prefix}%' 
         ORDER BY ${idColumn} DESC
     `);
-
-    if (result.recordset.length === 0) {
-        return prefix + '001'; // Nếu chưa có record nào thì trả về 001
-    }
-
+    if (result.recordset.length === 0) return prefix + '001';
     const lastId = result.recordset[0].maxId;
-    const numberPart = lastId.replace(prefix, ''); // Cắt bỏ tiền tố để lấy số
-    const nextNumber = parseInt(numberPart, 10) + 1; // Cộng thêm 1
-    
-    // Format lại thành 3 chữ số (VD: 2 -> 002)
+    const numberPart = lastId.replace(prefix, '');
+    const nextNumber = parseInt(numberPart, 10) + 1;
     return prefix + String(nextNumber).padStart(3, '0');
 }
 
-// 2. Sinh mã cho đơn hàng theo ngày (VD: DH260401-001)
 async function generateOrderId() {
     const date = new Date();
     const yy = String(date.getFullYear()).slice(-2);
@@ -77,20 +67,15 @@ async function generateOrderId() {
         WHERE MaDonHang LIKE '${prefix}%' 
         ORDER BY MaDonHang DESC
     `);
-
-    if (result.recordset.length === 0) {
-        return prefix + '001';
-    }
-
+    if (result.recordset.length === 0) return prefix + '001';
     const lastId = result.recordset[0].maxId;
-    const numberPart = lastId.split('-')[1]; // Lấy phần sau dấu '-'
+    const numberPart = lastId.split('-')[1];
     const nextNumber = parseInt(numberPart, 10) + 1;
-    
     return prefix + String(nextNumber).padStart(3, '0');
 }
 
 // ==========================================
-// API ENDPOINTS
+// API ENDPOINTS (DANH MỤC)
 // ==========================================
 
 // 1. LOẠI SẢN PHẨM
@@ -98,9 +83,7 @@ app.get('/api/loaisp', (req, res) => executeQuery(res, 'SELECT * FROM LOAI_SAN_P
 app.post('/api/loaisp', async (req, res) => {
     try {
         const newId = await generateId('LOAI_SAN_PHAM', 'MaLoai', 'LSP');
-        await executeQuery(res, 'INSERT INTO LOAI_SAN_PHAM(MaLoai, TenLoai) VALUES(@id, @ten)', [
-            { name: 'id', value: newId }, { name: 'ten', value: req.body.TenLoai }
-        ]);
+        await executeQuery(res, 'INSERT INTO LOAI_SAN_PHAM(MaLoai, TenLoai) VALUES(@id, @ten)', [{ name: 'id', value: newId }, { name: 'ten', value: req.body.TenLoai }]);
     } catch(e) { res.status(500).json({ error: e.message }); }
 });
 app.put('/api/loaisp/:id', (req, res) => executeQuery(res, 'UPDATE LOAI_SAN_PHAM SET TenLoai=@ten WHERE MaLoai=@id', [{ name: 'id', value: req.params.id }, { name: 'ten', value: req.body.TenLoai }]));
@@ -126,9 +109,7 @@ app.get('/api/donvicungcap', (req, res) => executeQuery(res, 'SELECT * FROM DON_
 app.post('/api/donvicungcap', async (req, res) => {
     try {
         const newId = await generateId('DON_VI_CUNG_CAP', 'MaDV', 'NCC');
-        await executeQuery(res, 'INSERT INTO DON_VI_CUNG_CAP(MaDV, Ten, DiaChi) VALUES(@id, @ten, @diachi)', [
-            { name: 'id', value: newId }, { name: 'ten', value: req.body.Ten }, { name: 'diachi', value: req.body.DiaChi }
-        ]);
+        await executeQuery(res, 'INSERT INTO DON_VI_CUNG_CAP(MaDV, Ten, DiaChi) VALUES(@id, @ten, @diachi)', [{ name: 'id', value: newId }, { name: 'ten', value: req.body.Ten }, { name: 'diachi', value: req.body.DiaChi }]);
     } catch(e) { res.status(500).json({ error: e.message }); }
 });
 app.put('/api/donvicungcap/:id', (req, res) => executeQuery(res, 'UPDATE DON_VI_CUNG_CAP SET Ten=@ten, DiaChi=@diachi WHERE MaDV=@id', [{ name: 'id', value: req.params.id }, { name: 'ten', value: req.body.Ten }, { name: 'diachi', value: req.body.DiaChi }]));
@@ -139,9 +120,7 @@ app.get('/api/khohang', (req, res) => executeQuery(res, 'SELECT * FROM KHO_HANG'
 app.post('/api/khohang', async (req, res) => {
     try {
         const newId = await generateId('KHO_HANG', 'MaKho', 'KHO');
-        await executeQuery(res, 'INSERT INTO KHO_HANG(MaKho, DiaChi) VALUES(@id, @diachi)', [
-            { name: 'id', value: newId }, { name: 'diachi', value: req.body.DiaChi }
-        ]);
+        await executeQuery(res, 'INSERT INTO KHO_HANG(MaKho, DiaChi) VALUES(@id, @diachi)', [{ name: 'id', value: newId }, { name: 'diachi', value: req.body.DiaChi }]);
     } catch(e) { res.status(500).json({ error: e.message }); }
 });
 app.put('/api/khohang/:id', (req, res) => executeQuery(res, 'UPDATE KHO_HANG SET DiaChi=@diachi WHERE MaKho=@id', [{ name: 'id', value: req.params.id }, { name: 'diachi', value: req.body.DiaChi }]));
@@ -152,9 +131,7 @@ app.get('/api/chinhanh', (req, res) => executeQuery(res, 'SELECT * FROM CHI_NHAN
 app.post('/api/chinhanh', async (req, res) => {
     try {
         const newId = await generateId('CHI_NHANH', 'MaCN', 'CN');
-        await executeQuery(res, 'INSERT INTO CHI_NHANH(MaCN, Ten, DiaChi) VALUES(@id, @ten, @diachi)', [
-            { name: 'id', value: newId }, { name: 'ten', value: req.body.Ten }, { name: 'diachi', value: req.body.DiaChi }
-        ]);
+        await executeQuery(res, 'INSERT INTO CHI_NHANH(MaCN, Ten, DiaChi) VALUES(@id, @ten, @diachi)', [{ name: 'id', value: newId }, { name: 'ten', value: req.body.Ten }, { name: 'diachi', value: req.body.DiaChi }]);
     } catch(e) { res.status(500).json({ error: e.message }); }
 });
 app.put('/api/chinhanh/:id', (req, res) => executeQuery(res, 'UPDATE CHI_NHANH SET Ten=@ten, DiaChi=@diachi WHERE MaCN=@id', [{ name: 'id', value: req.params.id }, { name: 'ten', value: req.body.Ten }, { name: 'diachi', value: req.body.DiaChi }]));
@@ -180,9 +157,7 @@ app.get('/api/vitri', (req, res) => executeQuery(res, 'SELECT * FROM VI_TRI'));
 app.post('/api/vitri', async (req, res) => {
     try {
         const newId = await generateId('VI_TRI', 'MaViTri', 'VT');
-        await executeQuery(res, 'INSERT INTO VI_TRI(MaViTri, LuongTheoGio, TenViTri) VALUES(@id, @luong, @ten)', [
-            { name: 'id', value: newId }, { name: 'luong', value: req.body.LuongTheoGio }, { name: 'ten', value: req.body.TenViTri }
-        ]);
+        await executeQuery(res, 'INSERT INTO VI_TRI(MaViTri, LuongTheoGio, TenViTri) VALUES(@id, @luong, @ten)', [{ name: 'id', value: newId }, { name: 'luong', value: req.body.LuongTheoGio }, { name: 'ten', value: req.body.TenViTri }]);
     } catch(e) { res.status(500).json({ error: e.message }); }
 });
 app.put('/api/vitri/:id', (req, res) => executeQuery(res, 'UPDATE VI_TRI SET LuongTheoGio=@luong, TenViTri=@ten WHERE MaViTri=@id', [{ name: 'id', value: req.params.id }, { name: 'luong', value: req.body.LuongTheoGio }, { name: 'ten', value: req.body.TenViTri }]));
@@ -203,42 +178,74 @@ app.put('/api/nhanvien/:id', (req, res) => executeQuery(res, 'UPDATE NHAN_VIEN S
 ]));
 app.delete('/api/nhanvien/:id', (req, res) => executeQuery(res, 'DELETE FROM NHAN_VIEN WHERE MaNV=@id', [{ name: 'id', value: req.params.id }]));
 
-
 // ==========================================
-// 9. QUẢN LÝ ĐƠN HÀNG
+// 9. QUẢN LÝ ĐƠN HÀNG (CÓ TRANSACTION + TRỪ KHO)
 // ==========================================
 app.get('/api/donhang', (req, res) => executeQuery(res, 'SELECT * FROM DON_HANG'));
 
 app.post('/api/donhang', async (req, res) => {
     const { NgayMua, PhuongThucThanhToan, MaKH, MaNV, ChiTiet } = req.body;
+
+    // Kiểm tra phải có giỏ hàng mới cho tạo đơn
+    if (!ChiTiet || !Array.isArray(ChiTiet) || ChiTiet.length === 0) {
+        return res.status(400).json({ error: "Đơn hàng trống! Vui lòng thêm sản phẩm." });
+    }
+
+    let transaction;
     try {
         const pool = await getPool();
-        // Backend tự sinh mã đơn hàng, bỏ qua mã Frontend gửi lên
         const newMaDonHang = await generateOrderId();
 
-        // 1. Chèn vào bảng DON_HANG
-        await pool.request()
-            .input('id', newMaDonHang)
-            .input('ngay', NgayMua)
-            .input('pttt', PhuongThucThanhToan)
-            .input('makh', MaKH)
-            .input('manv', MaNV)
-            .query('INSERT INTO DON_HANG VALUES(@id, @ngay, @pttt, @makh, @manv)');
+        // Bắt đầu Transaction (Đảm bảo an toàn dữ liệu)
+        transaction = new sql.Transaction(pool);
+        await transaction.begin();
 
-        // 2. Chèn vào bảng BAO_GOM (Chi tiết đơn hàng)
-        if (ChiTiet && Array.isArray(ChiTiet)) {
-            for (let item of ChiTiet) {
-                await pool.request()
-                    .input('idDon', newMaDonHang)
-                    .input('idSP', item.MaSP)
-                    .input('giaVon', item.GiaVonTrungBinh)
-                    .input('sl', item.SoLuongMua)
-                    .input('giaBan', item.DonGiaBan)
-                    .query('INSERT INTO BAO_GOM VALUES(@giaVon, @sl, @giaBan, @idDon, @idSP)');
+        // Bước 1: Lưu ĐƠN HÀNG
+        const reqDH = new sql.Request(transaction);
+        await reqDH
+            .input('id', sql.VarChar, newMaDonHang)
+            .input('ngay', sql.Date, NgayMua)
+            .input('pttt', sql.VarChar, PhuongThucThanhToan)
+            .input('makh', sql.VarChar, MaKH)
+            .input('manv', sql.VarChar, MaNV)
+            .query('INSERT INTO DON_HANG(MaDonHang, NgayMua, PhuongThucThanhToan, MaKH, MaNV) VALUES(@id, @ngay, @pttt, @makh, @manv)');
+
+        // Bước 2: Lưu CHI TIẾT (BAO_GOM) và TRỪ TỒN KHO
+        for (let item of ChiTiet) {
+            const reqCT = new sql.Request(transaction);
+            await reqCT
+                .input('idDon', sql.VarChar, newMaDonHang)
+                .input('idSP', sql.VarChar, item.MaSP)
+                .input('giaVon', sql.Float, item.GiaVonTrungBinh || 0)
+                .input('sl', sql.Int, item.SoLuongMua)
+                .input('giaBan', sql.Float, item.DonGiaBan)
+                .query('INSERT INTO BAO_GOM(GiaVonTrungBinh, SoLuongMua, DonGiaBan, MaDonHang, MaSP) VALUES(@giaVon, @sl, @giaBan, @idDon, @idSP)');
+
+            // Cập nhật trừ kho (Trừ vào kho đầu tiên có đủ số lượng)
+            const reqKho = new sql.Request(transaction);
+            const resultKho = await reqKho
+                .input('idSP', sql.VarChar, item.MaSP)
+                .input('sl', sql.Int, item.SoLuongMua)
+                .query(`
+                    UPDATE TON_KHO 
+                    SET SoLuong = SoLuong - @sl 
+                    WHERE MaKho = (SELECT TOP 1 MaKho FROM TON_KHO WHERE MaSP = @idSP AND SoLuong >= @sl) 
+                    AND MaSP = @idSP
+                `);
+
+            // Nếu updateKho.rowsAffected là 0 nghĩa là hết hàng hoặc số lượng yêu cầu lớn hơn tồn kho
+            if (resultKho.rowsAffected[0] === 0) {
+                throw new Error(`Sản phẩm mã [${item.MaSP}] đã hết hàng hoặc không đủ số lượng trong kho!`);
             }
         }
-        res.json({ success: true, message: `Tạo đơn hàng ${newMaDonHang} thành công!` });
+
+        // Bước 3: Hoàn thành mọi thứ -> Lưu thật vào DB
+        await transaction.commit();
+        res.json({ success: true, message: `Thanh toán thành công! Mã đơn: ${newMaDonHang}` });
+
     } catch (e) {
+        // Nếu có bất kỳ lỗi nào (kể cả hết hàng), Rollback (Hoàn tác) lại toàn bộ lệnh
+        if (transaction) await transaction.rollback();
         res.status(500).json({ error: e.message });
     }
 });
@@ -246,92 +253,77 @@ app.post('/api/donhang', async (req, res) => {
 app.delete('/api/donhang/:id', async (req, res) => {
     try {
         const pool = await getPool();
+        // Xóa chi tiết trước, xóa đơn sau
         await pool.request().input('id', req.params.id).query('DELETE FROM BAO_GOM WHERE MaDonHang = @id');
         await pool.request().input('id', req.params.id).query('DELETE FROM DON_HANG WHERE MaDonHang = @id');
         res.json({ success: true, message: "Đã xóa đơn hàng" });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-
 // ==========================================
-// 10. QUẢN LÝ TỒN KHO
+// 10. QUẢN LÝ TỒN KHO & MÀN HÌNH BÁN HÀNG
 // ==========================================
-// Tồn kho KHÔNG CẦN auto-generate ID vì khóa chính là sự kết hợp của (MaKho, MaSP)
 app.get('/api/tonkho', (req, res) => executeQuery(res, 'SELECT * FROM TON_KHO'));
+
+// [MỚI] API lấy danh sách Sản phẩm kèm Số lượng tồn kho dùng cho Màn Hình Bán Hàng POS
+app.get('/api/pos/sanpham', (req, res) => {
+    executeQuery(res, `
+        SELECT SP.MaSP, SP.Ten, SP.DonGia, ISNULL(SUM(TK.SoLuong), 0) AS TongTonKho
+        FROM SAN_PHAM SP
+        JOIN TON_KHO TK ON SP.MaSP = TK.MaSP
+        GROUP BY SP.MaSP, SP.Ten, SP.DonGia
+        HAVING ISNULL(SUM(TK.SoLuong), 0) > 0
+    `);
+});
+
 app.get('/api/tonkho/:maSP', (req, res) => {
     executeQuery(res, 'SELECT * FROM TON_KHO WHERE MaSP = @maSP', [{ name: 'maSP', value: req.params.maSP }]);
 });
 app.post('/api/tonkho', (req, res) => {
     executeQuery(res, 
         'INSERT INTO TON_KHO(MaKho, MaSP, SoLuong, ViTriHang, ViTriKhu) VALUES(@kho, @sp, @sl, @vt, @khu)', 
-        [
-            { name: 'kho', value: req.body.MaKho }, { name: 'sp', value: req.body.MaSP },
-            { name: 'sl', value: req.body.SoLuong }, { name: 'vt', value: req.body.ViTriHang }, { name: 'khu', value: req.body.ViTriKhu }
-        ]
+        [{ name: 'kho', value: req.body.MaKho }, { name: 'sp', value: req.body.MaSP }, { name: 'sl', value: req.body.SoLuong }, { name: 'vt', value: req.body.ViTriHang }, { name: 'khu', value: req.body.ViTriKhu }]
     );
 });
 app.put('/api/tonkho/:id', (req, res) => {
     executeQuery(res, 
         'UPDATE TON_KHO SET SoLuong=@sl, ViTriHang=@vt, ViTriKhu=@khu WHERE MaSP=@sp AND MaKho=@kho', 
-        [
-            { name: 'sl', value: req.body.SoLuong }, { name: 'vt', value: req.body.ViTriHang },
-            { name: 'khu', value: req.body.ViTriKhu }, { name: 'sp', value: req.params.id }, { name: 'kho', value: req.body.MaKho }
-        ]
+        [{ name: 'sl', value: req.body.SoLuong }, { name: 'vt', value: req.body.ViTriHang }, { name: 'khu', value: req.body.ViTriKhu }, { name: 'sp', value: req.params.id }, { name: 'kho', value: req.body.MaKho }]
     );
 });
 app.delete('/api/tonkho/:id', (req, res) => {
     executeQuery(res, 'DELETE FROM TON_KHO WHERE MaSP=@id', [{ name: 'id', value: req.params.id }]);
 });
+
 // ==========================================
 // 11. THỐNG KÊ (DASHBOARD)
 // ==========================================
 app.get('/api/thongke', async (req, res) => {
     try {
         const pool = await getPool();
-
-        // 1. Tổng doanh thu & Tổng số đơn hàng đã bán
         const q1 = await pool.request().query(`
-            SELECT 
-                ISNULL(SUM(SoLuongMua * DonGiaBan), 0) AS TongDoanhThu,
-                COUNT(DISTINCT MaDonHang) AS TongDonHang
-            FROM BAO_GOM
+            SELECT ISNULL(SUM(SoLuongMua * DonGiaBan), 0) AS TongDoanhThu, COUNT(DISTINCT MaDonHang) AS TongDonHang FROM BAO_GOM
         `);
-
-        // 2. Top 5 chi nhánh có doanh thu cao nhất
         const q2 = await pool.request().query(`
-            SELECT TOP 5 
-                CN.Ten AS ChiNhanh, 
-                ISNULL(SUM(BG.SoLuongMua * BG.DonGiaBan), 0) AS DoanhThu
+            SELECT TOP 5 CN.Ten AS ChiNhanh, ISNULL(SUM(BG.SoLuongMua * BG.DonGiaBan), 0) AS DoanhThu
             FROM BAO_GOM BG
             JOIN DON_HANG DH ON BG.MaDonHang = DH.MaDonHang
             JOIN NHAN_VIEN NV ON DH.MaNV = NV.MaNV
             JOIN CHI_NHANH CN ON NV.MaCN = CN.MaCN
-            GROUP BY CN.Ten
-            ORDER BY DoanhThu DESC
+            GROUP BY CN.Ten ORDER BY DoanhThu DESC
         `);
-
-        // 3. Top 5 thành phố khách hàng mua nhiều nhất
         const q3 = await pool.request().query(`
-            SELECT TOP 5 
-                KH.ThanhPho, 
-                ISNULL(SUM(BG.SoLuongMua * BG.DonGiaBan), 0) AS DoanhThu, 
-                COUNT(DISTINCT DH.MaDonHang) AS SoDon
+            SELECT TOP 5 KH.ThanhPho, ISNULL(SUM(BG.SoLuongMua * BG.DonGiaBan), 0) AS DoanhThu, COUNT(DISTINCT DH.MaDonHang) AS SoDon
             FROM BAO_GOM BG
             JOIN DON_HANG DH ON BG.MaDonHang = DH.MaDonHang
             JOIN KHACH_HANG KH ON DH.MaKH = KH.MaKH
-            GROUP BY KH.ThanhPho
-            ORDER BY DoanhThu DESC
+            GROUP BY KH.ThanhPho ORDER BY DoanhThu DESC
         `);
-
-        res.json({
-            tongDoanhThu: q1.recordset[0].TongDoanhThu,
-            tongDonHang: q1.recordset[0].TongDonHang,
-            chiNhanh: q2.recordset,
-            thanhPho: q3.recordset
-        });
+        res.json({ tongDoanhThu: q1.recordset[0].TongDoanhThu, tongDonHang: q1.recordset[0].TongDonHang, chiNhanh: q2.recordset, thanhPho: q3.recordset });
     } catch (e) {
         res.status(500).json({ error: e.message });
     }
 });
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Server đang chạy tại port ${PORT}`));
