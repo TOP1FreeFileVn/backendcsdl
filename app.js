@@ -197,7 +197,7 @@ app.delete('/api/nhanvien/:id', (req, res) => executeQuery(res, 'DELETE FROM NHA
 app.get('/api/donhang', (req, res) => executeQuery(res, 'SELECT * FROM DON_HANG'));
 
 app.post('/api/donhang', async (req, res) => {
-    const { MaDonHang, NgayMua, PhuongThucThanhToan, MaKH, MaNV, ChiTiet } = req.body;
+    let { MaDonHang, NgayMua, PhuongThucThanhToan, MaKH, MaNV, ChiTiet } = req.body;
 
     if (!ChiTiet || !Array.isArray(ChiTiet) || ChiTiet.length === 0) {
         return res.status(400).json({ error: "Đơn hàng trống! Vui lòng thêm sản phẩm." });
@@ -210,6 +210,56 @@ app.post('/api/donhang', async (req, res) => {
 
         transaction = new sql.Transaction(pool);
         await transaction.begin();
+
+        // 🌟 TÍNH NĂNG MỚI: TỰ ĐỘNG TẠO KHÁCH VÃNG LAI NẾU BỎ TRỐNG
+        if (!MaKH) {
+            // 1. Tìm địa chỉ chi nhánh của nhân viên đang bán
+            const reqNV = new sql.Request(transaction);
+            const nvInfo = await reqNV
+                .input('manv', sql.VarChar, MaNV)
+                .query(`
+                    SELECT CN.DiaChi, CN.ThanhPho 
+                    FROM NHAN_VIEN NV 
+                    JOIN CHI_NHANH CN ON NV.MaCN = CN.MaCN 
+                    WHERE NV.MaNV = @manv
+                `);
+            
+            let diaChiTam = null;
+            let thanhPhoTam = null;
+            
+            if (nvInfo.recordset.length > 0) {
+                diaChiTam = nvInfo.recordset[0].DiaChi;
+                // Giả sử địa chỉ chi nhánh có format "Số nhà, Phường, Quận, Thành phố"
+                // Ta có thể lấy chữ cuối cùng làm Thành Phố (Tùy cấu trúc CSDL của bạn)
+                // Ở đây mình gán tạm toàn bộ vào Số Nhà
+            }
+
+            // 2. Tạo mã khách hàng mới
+            const reqGenID = new sql.Request(transaction);
+            const idResult = await reqGenID.query(`
+                SELECT TOP 1 MaKH AS maxId FROM KHACH_HANG WHERE MaKH LIKE 'KH%' ORDER BY MaKH DESC
+            `);
+            let newMaKH = 'KH001';
+            if (idResult.recordset.length > 0) {
+                const nextNumber = parseInt(idResult.recordset[0].maxId.replace('KH', ''), 10) + 1;
+                newMaKH = 'KH' + String(nextNumber).padStart(3, '0');
+            }
+
+            // 3. Insert khách vãng lai mới vào DB
+            const reqInsertKH = new sql.Request(transaction);
+            await reqInsertKH
+                .input('MaKH', sql.VarChar, newMaKH)
+                .input('Ten', sql.NVarChar, 'Khách Vãng Lai')
+                .input('SoNha', sql.NVarChar, diaChiTam)
+                .query(`
+                    INSERT INTO KHACH_HANG(MaKH, Ten, SoNha) 
+                    VALUES(@MaKH, @Ten, @SoNha)
+                `);
+            
+            // 4. Gán mã KH vừa tạo vào đơn hàng hiện tại
+            MaKH = newMaKH;
+        }
+        // 🌟 KẾT THÚC PHẦN TỰ ĐỘNG TẠO KHÁCH VÃNG LAI
 
         const reqDH = new sql.Request(transaction);
         await reqDH
