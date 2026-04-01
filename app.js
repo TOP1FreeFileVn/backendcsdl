@@ -27,7 +27,16 @@ async function executeQuery(res, query, inputs = []) {
     try {
         const pool = await getPool();
         const request = pool.request();
-        inputs.forEach(input => request.input(input.name, input.value));
+        
+        inputs.forEach(input => {
+            // [SỬA LỖI FONT]: Tự động nhận diện chuỗi (string) và ép kiểu sang NVARCHAR
+            if (typeof input.value === 'string') {
+                request.input(input.name, sql.NVarChar, input.value);
+            } else {
+                request.input(input.name, input.value);
+            }
+        });
+
         const result = await request.query(query);
         res.json(result.recordset || { success: true });
     } catch (e) {
@@ -205,7 +214,7 @@ app.post('/api/donhang', async (req, res) => {
         await reqDH
             .input('id', sql.VarChar, newMaDonHang)
             .input('ngay', sql.Date, NgayMua)
-            .input('pttt', sql.VarChar, PhuongThucThanhToan)
+            .input('pttt', sql.NVarChar, PhuongThucThanhToan) // [SỬA LỖI FONT]: Đổi thành sql.NVarChar tại đây
             .input('makh', sql.VarChar, MaKH)
             .input('manv', sql.VarChar, MaNV)
             .query('INSERT INTO DON_HANG(MaDonHang, NgayMua, PhuongThucThanhToan, MaKH, MaNV) VALUES(@id, @ngay, @pttt, @makh, @manv)');
