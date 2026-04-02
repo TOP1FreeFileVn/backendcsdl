@@ -281,6 +281,8 @@ app.post('/api/donhang', async (req, res) => {
         res.status(500).json({ error: e.message });
     }
 });
+// 10. PHIẾU KHO (Chỉ xem lịch sử)
+app.get('/api/phieukho', (req, res) => executeQuery(res, 'SELECT * FROM PHIEU_KHO ORDER BY NgayLap DESC'));
 // LẤY CHI TIẾT PHIẾU ĐỂ IN PDF
 app.get('/api/phieukho/:id/chitiet', async (req, res) => {
     try {
