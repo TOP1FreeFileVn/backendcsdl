@@ -281,7 +281,30 @@ app.post('/api/donhang', async (req, res) => {
         res.status(500).json({ error: e.message });
     }
 });
-
+// LẤY CHI TIẾT PHIẾU ĐỂ IN PDF
+app.get('/api/phieukho/:id/chitiet', async (req, res) => {
+    try {
+        const pool = await getPool();
+        const result = await pool.request()
+            .input('id', sql.VarChar, req.params.id)
+            .query(`
+                SELECT 
+                    P.MaPhieu, P.NgayLap, P.LoaiPhieu, 
+                    NV.HoTen AS NguoiLap, 
+                    DD.Ten AS TenKho, ISNULL(DD.SoNha + ', ' + DD.Phuong + ', ' + DD.ThanhPho, N'Chưa cập nhật') AS DiaChiKho,
+                    SP.Ten AS TenSP, CT.SoLuongNhap
+                FROM PHIEU_KHO P
+                JOIN CHI_TIET_PHIEU CT ON P.MaPhieu = CT.MaPhieu
+                JOIN SAN_PHAM SP ON CT.MaSP = SP.MaSP
+                JOIN NHAN_VIEN NV ON P.MaNV = NV.MaNV
+                JOIN DIA_DIEM DD ON P.MaDD = DD.MaDD
+                WHERE P.MaPhieu = @id
+            `);
+        res.json(result.recordset);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
 // ==========================================
 // THỐNG KÊ DASHBOARD MỚI
 // ==========================================
