@@ -18,9 +18,6 @@ const dbConfig = {
 
 async function getPool() { return await sql.connect(dbConfig); }
 
-// ==========================================
-// HÀM HELPER CHUNG
-// ==========================================
 async function executeQuery(res, query, inputs = []) {
     try {
         const pool = await getPool();
@@ -53,21 +50,16 @@ async function generateOrderId() {
     return prefix + String(lastNumber + 1).padStart(3, '0');
 }
 
-// ==========================================
-// SEPAY WEBHOOK & KIỂM TRA THANH TOÁN
-// ==========================================
 const paidOrders = new Set(); 
 
 app.post('/api/webhook/sepay', async (req, res) => {
     try {
         const data = req.body;
-        console.log("💰 [SEPAY] CÓ TIỀN VÀO:", data.transferAmount, "đ | Nội dung:", data.content);
         const match = data.content.match(/DH\d{6}-?\d{3}/i); 
         if (match) {
             let maDon = match[0].toUpperCase();
             if (!maDon.includes('-')) maDon = maDon.slice(0, 8) + '-' + maDon.slice(8);
             paidOrders.add(maDon); 
-            console.log("✅ [SEPAY] Đã chốt tự động cho đơn:", maDon);
         }
         res.status(200).json({ success: true });
     } catch (error) { res.status(500).json({ error: 'Internal Server Error' }); }
@@ -79,9 +71,6 @@ app.get('/api/check-payment/:id', (req, res) => {
     res.json({ isPaid });
 });
 
-// ==========================================
-// API ENDPOINTS (DANH MỤC CƠ BẢN 3NF)
-// ==========================================
 app.get('/api/loaisp', (req, res) => executeQuery(res, 'SELECT * FROM LOAI_SAN_PHAM'));
 app.post('/api/loaisp', async (req, res) => {
     try { const id = await generateId('LOAI_SAN_PHAM', 'MaLoai', 'LSP'); await executeQuery(res, 'INSERT INTO LOAI_SAN_PHAM VALUES(@id, @ten)', [{name:'id', value:id}, {name:'ten', value:req.body.TenLoai}]); } catch(e) { res.status(500).json({error:e.message}); }
@@ -143,12 +132,6 @@ app.post('/api/tonkho', (req, res) => executeQuery(res, 'INSERT INTO TON_KHO(MaS
 app.put('/api/tonkho/:id', (req, res) => executeQuery(res, 'UPDATE TON_KHO SET SoLuong=@sl WHERE MaSP=@id AND MaKe=@make', [{name:'sl', value:req.body.SoLuong}, {name:'id', value:req.params.id}, {name:'make', value:req.body.MaKe}]));
 app.delete('/api/tonkho/:id', (req, res) => executeQuery(res, 'DELETE FROM TON_KHO WHERE MaSP=@id', [{name:'id', value:req.params.id}]));
 
-
-// ==========================================
-// NGHIỆP VỤ BÁN HÀNG VÀ KHO BÃI (GỘP DỮ LIỆU)
-// ==========================================
-
-// LẤY SẢN PHẨM CHO POS
 app.get('/api/pos/sanpham', (req, res) => {
     executeQuery(res, `
         SELECT SP.MaSP, SP.Ten, SP.DonGia, ISNULL(SUM(TK.SoLuong), 0) AS TongTonKho
@@ -157,7 +140,6 @@ app.get('/api/pos/sanpham', (req, res) => {
     `);
 });
 
-// TẠO MÃ ĐƠN HÀNG MỚI ĐỂ FRONTEND HIỂN THỊ MÃ QR 
 app.get('/api/donhang/generate-id', async (req, res) => {
     try {
         const newId = await generateOrderId();
@@ -167,12 +149,11 @@ app.get('/api/donhang/generate-id', async (req, res) => {
     }
 });
 
-// LẤY LỊCH SỬ ĐƠN HÀNG GỘP VỚI GIAO DỊCH (Lấy thời gian chính xác từ NgayGD)
 app.get('/api/donhang', (req, res) => {
     const query = `
         SELECT 
             DH.MaDH, 
-            ISNULL(GD.NgayGD, DH.NgayMua) AS NgayMua, -- Ép thời gian chính xác từ bảng Giao Dịch sang 
+            ISNULL(GD.NgayGD, DH.NgayMua) AS NgayMua, 
             DH.TongTien, 
             DH.MaKH, DH.MaNV,
             GD.PhuongThuc, ISNULL(GD.TrangThai, N'Chưa trả') AS TrangThaiGD
@@ -183,7 +164,6 @@ app.get('/api/donhang', (req, res) => {
     executeQuery(res, query);
 });
 
-// XỬ LÝ THANH TOÁN (TRANSACTION)
 app.post('/api/donhang', async (req, res) => {
     let { MaDonHang, NgayMua, PhuongThucThanhToan, MaKH, MaNV, ChiTiet } = req.body;
     if (!ChiTiet || ChiTiet.length === 0) return res.status(400).json({ error: "Đơn hàng trống!" });
@@ -243,7 +223,6 @@ app.post('/api/donhang', async (req, res) => {
     }
 });
 
-// LẤY CHI TIẾT ĐƠN HÀNG ĐỂ IN HÓA ĐƠN PDF
 app.get('/api/donhang/:id/chitiet', async (req, res) => {
     try {
         const pool = await getPool();
@@ -270,12 +249,8 @@ app.get('/api/donhang/:id/chitiet', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ==========================================
-// CÁC MỤC LỊCH SỬ (CHỈ XEM)
-// ==========================================
 app.get('/api/phieukho', (req, res) => executeQuery(res, 'SELECT * FROM PHIEU_KHO ORDER BY NgayLap DESC, MaPhieu DESC'));
 
-// LẤY CHI TIẾT PHIẾU KHO ĐỂ IN PDF
 app.get('/api/phieukho/:id/chitiet', async (req, res) => {
     try {
         const pool = await getPool();
@@ -284,9 +259,6 @@ app.get('/api/phieukho/:id/chitiet', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ==========================================
-// THỐNG KÊ DASHBOARD 
-// ==========================================
 app.get('/api/thongke', async (req, res) => {
     try {
         const pool = await getPool();
