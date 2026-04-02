@@ -168,13 +168,18 @@ app.get('/api/pos/sanpham', (req, res) => {
 app.get('/api/donhang', (req, res) => executeQuery(res, 'SELECT * FROM DON_HANG ORDER BY NgayMua DESC, MaDH DESC'));
 
 // TẠO MÃ ĐƠN HÀNG MỚI ĐỂ ĐẨY LÊN FRONTEND HIỂN THỊ MÃ QR (FIX LỖI 404 Ở ĐÂY)
-app.get('/api/donhang/generate-id', async (req, res) => {
-    try {
-        const newId = await generateOrderId();
-        res.json({ newId });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
+// LẤY LỊCH SỬ ĐƠN HÀNG GỘP VỚI GIAO DỊCH (Giao nhau theo MaDH)
+app.get('/api/donhang', (req, res) => {
+    const query = `
+        SELECT 
+            DH.MaDH, DH.NgayMua, DH.TrangThai AS TrangThaiDon, DH.TongTien, 
+            DH.MaKH, DH.MaNV,
+            GD.PhuongThuc, GD.TrangThai AS TrangThaiGD
+        FROM DON_HANG DH
+        LEFT JOIN GIAO_DICH GD ON DH.MaDH = GD.MaDH
+        ORDER BY DH.NgayMua DESC, DH.MaDH DESC
+    `;
+    executeQuery(res, query);
 });
 
 // XỬ LÝ THANH TOÁN (TRANSACTION)
