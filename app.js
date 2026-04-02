@@ -56,11 +56,31 @@ async function generateOrderId() {
 // ==========================================
 const paidOrders = new Set(); 
 
-app.get('/api/donhang/generate-id', async (req, res) => {
-    try { const newId = await generateOrderId(); res.json({ newId }); } 
-    catch (e) { res.status(500).json({ error: e.message }); }
+// LẤY CHI TIẾT ĐƠN HÀNG ĐỂ IN HÓA ĐƠN PDF (ĐÃ FIX LỖI LEFT JOIN)
+app.get('/api/donhang/:id/chitiet', async (req, res) => {
+    try {
+        const pool = await getPool();
+        const result = await pool.request()
+            .input('id', sql.VarChar, req.params.id)
+            .query(`
+                SELECT 
+                    DH.MaDH, DH.NgayMua, DH.TongTien, DH.TrangThai,
+                    ISNULL(KH.TenKH, N'Khách lẻ') AS TenKH, ISNULL(KH.SDT, N'Không có') AS SDTKhach,
+                    ISNULL(NV.HoTen, N'Không xác định') AS NguoiBan,
+                    SP.Ten AS TenSP, CT.SoLuongMua, CT.DonGiaBan,
+                    (CT.SoLuongMua * CT.DonGiaBan) AS ThanhTien
+                FROM DON_HANG DH
+                JOIN CHI_TIET_DON CT ON DH.MaDH = CT.MaDH
+                JOIN SAN_PHAM SP ON CT.MaSP = SP.MaSP
+                LEFT JOIN NHAN_VIEN NV ON DH.MaNV = NV.MaNV
+                LEFT JOIN KHACH_HANG KH ON DH.MaKH = KH.MaKH
+                WHERE DH.MaDH = @id
+            `);
+        res.json(result.recordset);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
-
 app.post('/api/webhook/sepay', async (req, res) => {
     try {
         const data = req.body;
