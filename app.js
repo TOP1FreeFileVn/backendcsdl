@@ -52,37 +52,10 @@ async function generateOrderId() {
 }
 
 // ==========================================
-// SEPAY WEBHOOK (GIỮ NGUYÊN)
+// SEPAY WEBHOOK & KIỂM TRA THANH TOÁN
 // ==========================================
 const paidOrders = new Set(); 
 
-// LẤY CHI TIẾT ĐƠN HÀNG ĐỂ IN HÓA ĐƠN PDF (ĐÃ FIX LỖI LEFT JOIN)
-app.get('/api/donhang/:id/chitiet', async (req, res) => {
-    try {
-        const pool = await getPool();
-        const result = await pool.request()
-            .input('id', sql.VarChar, req.params.id)
-            .query(`
-                SELECT 
-                    DH.MaDH, DH.NgayMua, DH.TongTien, DH.TrangThai,
-                    ISNULL(KH.TenKH, N'Khách lẻ') AS TenKH, ISNULL(KH.SDT, N'Không có') AS SDTKhach,
-                    ISNULL(NV.HoTen, N'Không xác định') AS NguoiBan,
-                    SP.Ten AS TenSP, CT.SoLuongMua, CT.DonGiaBan,
-                    (CT.SoLuongMua * CT.DonGiaBan) AS ThanhTien
-                FROM DON_HANG DH
-                JOIN CHI_TIET_DON CT ON DH.MaDH = CT.MaDH
-                JOIN SAN_PHAM SP ON CT.MaSP = SP.MaSP
-                LEFT JOIN NHAN_VIEN NV ON DH.MaNV = NV.MaNV
-                LEFT JOIN KHACH_HANG KH ON DH.MaKH = KH.MaKH
-                WHERE DH.MaDH = @id
-            `);
-        res.json(result.recordset);
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
-// LẤY LỊCH SỬ GIAO DỊCH (Sắp xếp mới nhất lên đầu)
-app.get('/api/giaodich', (req, res) => executeQuery(res, 'SELECT * FROM GIAO_DICH ORDER BY NgayGD DESC'));
 app.post('/api/webhook/sepay', async (req, res) => {
     try {
         const data = req.body;
@@ -155,16 +128,6 @@ app.post('/api/nhanvien', async (req, res) => {
 app.put('/api/nhanvien/:id', (req, res) => executeQuery(res, 'UPDATE NHAN_VIEN SET HoTen=@ht, SDT=@sdt, Email=@em, MucLuong=@luong, ViTri=@vt, MaDD=@madd WHERE MaNV=@id', [{name:'id', value:req.params.id}, {name:'ht', value:req.body.HoTen}, {name:'sdt', value:req.body.SDT||null}, {name:'em', value:req.body.Email||null}, {name:'luong', value:req.body.MucLuong}, {name:'vt', value:req.body.ViTri||null}, {name:'madd', value:req.body.MaDD}]));
 app.delete('/api/nhanvien/:id', (req, res) => executeQuery(res, 'DELETE FROM NHAN_VIEN WHERE MaNV=@id', [{name:'id', value:req.params.id}]));
 
-// ==========================================
-// TỒN KHO & POS (CHUẨN 3NF)
-// ==========================================
-app.get('/api/pos/sanpham', (req, res) => {
-    executeQuery(res, `
-        SELECT SP.MaSP, SP.Ten, SP.DonGia, ISNULL(SUM(TK.SoLuong), 0) AS TongTonKho
-        FROM SAN_PHAM SP JOIN TON_KHO TK ON SP.MaSP = TK.MaSP
-        GROUP BY SP.MaSP, SP.Ten, SP.DonGia HAVING ISNULL(SUM(TK.SoLuong), 0) > 0
-    `);
-});
 // 7. KHU VỰC
 app.get('/api/khuvuc', (req, res) => executeQuery(res, 'SELECT * FROM KHU_VUC'));
 app.post('/api/khuvuc', async (req, res) => {
@@ -186,11 +149,35 @@ app.get('/api/tonkho', (req, res) => executeQuery(res, 'SELECT * FROM TON_KHO'))
 app.post('/api/tonkho', (req, res) => executeQuery(res, 'INSERT INTO TON_KHO(MaSP, MaKe, SoLuong) VALUES(@masp, @make, @sl)', [{name:'masp', value:req.body.MaSP}, {name:'make', value:req.body.MaKe}, {name:'sl', value:req.body.SoLuong}]));
 app.put('/api/tonkho/:id', (req, res) => executeQuery(res, 'UPDATE TON_KHO SET SoLuong=@sl WHERE MaSP=@id AND MaKe=@make', [{name:'sl', value:req.body.SoLuong}, {name:'id', value:req.params.id}, {name:'make', value:req.body.MaKe}]));
 app.delete('/api/tonkho/:id', (req, res) => executeQuery(res, 'DELETE FROM TON_KHO WHERE MaSP=@id', [{name:'id', value:req.params.id}]));
-// ==========================================
-// NGHIỆP VỤ BÁN HÀNG (CỰC KỲ PHỨC TẠP BỞI 3NF)
-// ==========================================
-app.get('/api/donhang', (req, res) => executeQuery(res, 'SELECT * FROM DON_HANG'));
 
+
+// ==========================================
+// NGHIỆP VỤ BÁN HÀNG VÀ KHO BÃI (CHUẨN 3NF)
+// ==========================================
+
+// LẤY SẢN PHẨM CHO POS
+app.get('/api/pos/sanpham', (req, res) => {
+    executeQuery(res, `
+        SELECT SP.MaSP, SP.Ten, SP.DonGia, ISNULL(SUM(TK.SoLuong), 0) AS TongTonKho
+        FROM SAN_PHAM SP JOIN TON_KHO TK ON SP.MaSP = TK.MaSP
+        GROUP BY SP.MaSP, SP.Ten, SP.DonGia HAVING ISNULL(SUM(TK.SoLuong), 0) > 0
+    `);
+});
+
+// LẤY DANH SÁCH ĐƠN HÀNG
+app.get('/api/donhang', (req, res) => executeQuery(res, 'SELECT * FROM DON_HANG ORDER BY NgayMua DESC, MaDH DESC'));
+
+// TẠO MÃ ĐƠN HÀNG MỚI ĐỂ ĐẨY LÊN FRONTEND HIỂN THỊ MÃ QR (FIX LỖI 404 Ở ĐÂY)
+app.get('/api/donhang/generate-id', async (req, res) => {
+    try {
+        const newId = await generateOrderId();
+        res.json({ newId });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// XỬ LÝ THANH TOÁN (TRANSACTION)
 app.post('/api/donhang', async (req, res) => {
     let { MaDonHang, NgayMua, PhuongThucThanhToan, MaKH, MaNV, ChiTiet } = req.body;
     if (!ChiTiet || ChiTiet.length === 0) return res.status(400).json({ error: "Đơn hàng trống!" });
@@ -204,7 +191,7 @@ app.post('/api/donhang', async (req, res) => {
         transaction = new sql.Transaction(pool);
         await transaction.begin();
 
-        // 1. LẤY MÃ ĐỊA ĐIỂM (CHI NHÁNH) CỦA NHÂN VIÊN ĐỂ LÀM PHIẾU XUẤT KHO & TẠO KHÁCH VÃNG LAI
+        // 1. LẤY MÃ ĐỊA ĐIỂM (CHI NHÁNH) CỦA NHÂN VIÊN
         const reqDD = new sql.Request(transaction);
         const ddInfo = await reqDD.input('manv', sql.VarChar, MaNV).query(`
             SELECT DD.MaDD, DD.SoNha + ', ' + DD.Phuong + ', ' + DD.Quan + ', ' + DD.ThanhPho AS DiaChiFull 
@@ -212,18 +199,14 @@ app.post('/api/donhang', async (req, res) => {
         `);
         const maDDNV = ddInfo.recordset[0].MaDD;
 
-        // 2. NẾU KHÔNG CÓ KHÁCH HÀNG -> TẠO KHÁCH VÃNG LAI LẤY ĐỊA CHỈ CHI NHÁNH
         // 2. NẾU KHÔNG CÓ KHÁCH HÀNG -> TẠO HOẶC DÙNG LẠI KHÁCH VÃNG LAI
         if (!MaKH) {
-            // Kiểm tra xem trong DB đã có "Khách Vãng Lai" chưa
             const reqCheck = new sql.Request(transaction);
             const checkResult = await reqCheck.query(`SELECT TOP 1 MaKH FROM KHACH_HANG WHERE TenKH = N'Khách Vãng Lai'`);
 
             if (checkResult.recordset.length > 0) {
-                // Nếu ĐÃ CÓ, lấy mã đó xài luôn (Tránh tạo rác DB và lỗi UNIQUE)
                 MaKH = checkResult.recordset[0].MaKH;
             } else {
-                // Nếu CHƯA CÓ, mới tạo 1 ông Khách Vãng Lai duy nhất cho hệ thống
                 const reqGenID = new sql.Request(transaction);
                 const idResult = await reqGenID.query(`SELECT TOP 1 MaKH AS maxId FROM KHACH_HANG WHERE MaKH LIKE 'KH%' ORDER BY MaKH DESC`);
                 let newMaKH = 'KH001';
@@ -240,6 +223,7 @@ app.post('/api/donhang', async (req, res) => {
                 MaKH = newMaKH;
             }
         }
+
         // 3. LƯU ĐƠN HÀNG (DON_HANG)
         const reqDH = new sql.Request(transaction);
         await reqDH
@@ -292,7 +276,6 @@ app.post('/api/donhang', async (req, res) => {
             await reqCTP
                 .input('mp', sql.VarChar, newMaPhieu).input('masp', sql.VarChar, item.MaSP).input('slx', sql.Int, item.SoLuongMua)
                 .query(`INSERT INTO CHI_TIET_PHIEU(MaPhieu, MaSP, SoLuongNhap, GiaNhap) VALUES(@mp, @masp, @slx, 0)`); 
-                // Ghi chú: Cột SoLuongNhap ở 3NF dùng chung cho cả Nhập/Xuất, ở đây giá nhập xuất bán = 0
         }
 
         await transaction.commit();
@@ -303,8 +286,39 @@ app.post('/api/donhang', async (req, res) => {
         res.status(500).json({ error: e.message });
     }
 });
-// 10. PHIẾU KHO (Chỉ xem lịch sử)
-app.get('/api/phieukho', (req, res) => executeQuery(res, 'SELECT * FROM PHIEU_KHO ORDER BY NgayLap DESC'));
+
+// LẤY CHI TIẾT ĐƠN HÀNG ĐỂ IN HÓA ĐƠN PDF
+app.get('/api/donhang/:id/chitiet', async (req, res) => {
+    try {
+        const pool = await getPool();
+        const result = await pool.request()
+            .input('id', sql.VarChar, req.params.id)
+            .query(`
+                SELECT 
+                    DH.MaDH, DH.NgayMua, DH.TongTien, DH.TrangThai,
+                    ISNULL(KH.TenKH, N'Khách lẻ') AS TenKH, ISNULL(KH.SDT, N'Không có') AS SDTKhach,
+                    ISNULL(NV.HoTen, N'Không xác định') AS NguoiBan,
+                    SP.Ten AS TenSP, CT.SoLuongMua, CT.DonGiaBan,
+                    (CT.SoLuongMua * CT.DonGiaBan) AS ThanhTien
+                FROM DON_HANG DH
+                JOIN CHI_TIET_DON CT ON DH.MaDH = CT.MaDH
+                JOIN SAN_PHAM SP ON CT.MaSP = SP.MaSP
+                LEFT JOIN NHAN_VIEN NV ON DH.MaNV = NV.MaNV
+                LEFT JOIN KHACH_HANG KH ON DH.MaKH = KH.MaKH
+                WHERE DH.MaDH = @id
+            `);
+        res.json(result.recordset);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
+
+// ==========================================
+// CÁC MỤC LỊCH SỬ (CHỈ XEM)
+// ==========================================
+app.get('/api/phieukho', (req, res) => executeQuery(res, 'SELECT * FROM PHIEU_KHO ORDER BY NgayLap DESC, MaPhieu DESC'));
+
 // LẤY CHI TIẾT PHIẾU ĐỂ IN PDF
 app.get('/api/phieukho/:id/chitiet', async (req, res) => {
     try {
@@ -329,8 +343,12 @@ app.get('/api/phieukho/:id/chitiet', async (req, res) => {
         res.status(500).json({ error: e.message });
     }
 });
+
+app.get('/api/giaodich', (req, res) => executeQuery(res, 'SELECT * FROM GIAO_DICH ORDER BY NgayGD DESC, MaGD DESC'));
+
+
 // ==========================================
-// THỐNG KÊ DASHBOARD MỚI
+// THỐNG KÊ DASHBOARD 
 // ==========================================
 app.get('/api/thongke', async (req, res) => {
     try {
