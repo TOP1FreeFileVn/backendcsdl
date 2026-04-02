@@ -47,9 +47,7 @@ async function generateOrderId() {
     const prefix = `DH${String(date.getFullYear()).slice(-2)}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}-`;
     const pool = await getPool();
     const result = await pool.request().query(`SELECT TOP 1 MaDH AS maxId FROM DON_HANG WHERE MaDH LIKE '${prefix}%' ORDER BY MaDH DESC`);
-    
     if (result.recordset.length === 0) return prefix + '001';
-    
     const lastId = result.recordset[0].maxId;
     const lastNumber = parseInt(lastId.split('-')[1], 10);
     return prefix + String(lastNumber + 1).padStart(3, '0');
@@ -169,11 +167,13 @@ app.get('/api/donhang/generate-id', async (req, res) => {
     }
 });
 
-// LẤY LỊCH SỬ ĐƠN HÀNG GỘP VỚI GIAO DỊCH (Giao nhau theo MaDH)
+// LẤY LỊCH SỬ ĐƠN HÀNG GỘP VỚI GIAO DỊCH (Lấy thời gian chính xác từ NgayGD)
 app.get('/api/donhang', (req, res) => {
     const query = `
         SELECT 
-            DH.MaDH, DH.NgayMua, DH.TongTien, 
+            DH.MaDH, 
+            ISNULL(GD.NgayGD, DH.NgayMua) AS NgayMua, -- Ép thời gian chính xác từ bảng Giao Dịch sang 
+            DH.TongTien, 
             DH.MaKH, DH.MaNV,
             GD.PhuongThuc, ISNULL(GD.TrangThai, N'Chưa trả') AS TrangThaiGD
         FROM DON_HANG DH
@@ -218,7 +218,7 @@ app.post('/api/donhang', async (req, res) => {
             }
         }
 
-        await new sql.Request(transaction).input('id', sql.VarChar, newMaDH).input('ngay', sql.Date, NgayMua).input('tong', sql.Float, tongTien).input('makh', sql.VarChar, MaKH).input('manv', sql.VarChar, MaNV).query(`INSERT INTO DON_HANG(MaDH, NgayMua, TrangThai, TongTien, MaKH, MaNV) VALUES(@id, @ngay, N'Hoàn thành', @tong, @makh, @manv)`);
+        await new sql.Request(transaction).input('id', sql.VarChar, newMaDH).input('ngay', sql.Date, NgayMua).input('tong', sql.Float, tongTien).input('makh', sql.VarChar, MaKH).input('manv', sql.VarChar, MaNV).query(`INSERT INTO DON_HANG(MaDH, NgayMua, TrangThai, TongTien, MaKH, MaNV) VALUES(@id, GETDATE(), N'Hoàn thành', @tong, @makh, @manv)`);
 
         const gdResult = await new sql.Request(transaction).query(`SELECT TOP 1 MaGD AS maxId FROM GIAO_DICH WHERE MaGD LIKE 'GD%' ORDER BY MaGD DESC`);
         let newMaGD = gdResult.recordset.length > 0 ? 'GD' + String(parseInt(gdResult.recordset[0].maxId.replace('GD',''), 10)+1).padStart(3, '0') : 'GD001';
@@ -247,7 +247,25 @@ app.post('/api/donhang', async (req, res) => {
 app.get('/api/donhang/:id/chitiet', async (req, res) => {
     try {
         const pool = await getPool();
-        const result = await pool.request().input('id', sql.VarChar, req.params.id).query(`SELECT DH.MaDH, DH.NgayMua, DH.TongTien, ISNULL(KH.TenKH, N'Khách lẻ') AS TenKH, ISNULL(KH.SDT, N'Không có') AS SDTKhach, ISNULL(NV.HoTen, N'Không xác định') AS NguoiBan, SP.Ten AS TenSP, CT.SoLuongMua, CT.DonGiaBan, (CT.SoLuongMua * CT.DonGiaBan) AS ThanhTien FROM DON_HANG DH JOIN CHI_TIET_DON CT ON DH.MaDH = CT.MaDH JOIN SAN_PHAM SP ON CT.MaSP = SP.MaSP LEFT JOIN NHAN_VIEN NV ON DH.MaNV = NV.MaNV LEFT JOIN KHACH_HANG KH ON DH.MaKH = KH.MaKH WHERE DH.MaDH = @id`);
+        const result = await pool.request().input('id', sql.VarChar, req.params.id).query(`
+            SELECT 
+                DH.MaDH, 
+                ISNULL(GD.NgayGD, DH.NgayMua) AS NgayMua, 
+                DH.TongTien, 
+                GD.PhuongThuc,
+                ISNULL(KH.TenKH, N'Khách lẻ') AS TenKH, 
+                ISNULL(KH.SDT, N'Không có') AS SDTKhach, 
+                ISNULL(NV.HoTen, N'Không xác định') AS NguoiBan, 
+                SP.Ten AS TenSP, CT.SoLuongMua, CT.DonGiaBan, 
+                (CT.SoLuongMua * CT.DonGiaBan) AS ThanhTien 
+            FROM DON_HANG DH 
+            JOIN CHI_TIET_DON CT ON DH.MaDH = CT.MaDH 
+            JOIN SAN_PHAM SP ON CT.MaSP = SP.MaSP 
+            LEFT JOIN GIAO_DICH GD ON DH.MaDH = GD.MaDH
+            LEFT JOIN NHAN_VIEN NV ON DH.MaNV = NV.MaNV 
+            LEFT JOIN KHACH_HANG KH ON DH.MaKH = KH.MaKH 
+            WHERE DH.MaDH = @id
+        `);
         res.json(result.recordset);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -265,8 +283,6 @@ app.get('/api/phieukho/:id/chitiet', async (req, res) => {
         res.json(result.recordset);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
-
-app.get('/api/giaodich', (req, res) => executeQuery(res, 'SELECT * FROM GIAO_DICH ORDER BY NgayGD DESC, MaGD DESC'));
 
 // ==========================================
 // THỐNG KÊ DASHBOARD 
