@@ -81,6 +81,8 @@ app.get('/api/donhang/:id/chitiet', async (req, res) => {
         res.status(500).json({ error: e.message });
     }
 });
+// LẤY LỊCH SỬ GIAO DỊCH (Sắp xếp mới nhất lên đầu)
+app.get('/api/giaodich', (req, res) => executeQuery(res, 'SELECT * FROM GIAO_DICH ORDER BY NgayGD DESC'));
 app.post('/api/webhook/sepay', async (req, res) => {
     try {
         const data = req.body;
