@@ -191,19 +191,33 @@ app.post('/api/donhang', async (req, res) => {
         const maDDNV = ddInfo.recordset[0].MaDD;
 
         // 2. NẾU KHÔNG CÓ KHÁCH HÀNG -> TẠO KHÁCH VÃNG LAI LẤY ĐỊA CHỈ CHI NHÁNH
+        // 2. NẾU KHÔNG CÓ KHÁCH HÀNG -> TẠO HOẶC DÙNG LẠI KHÁCH VÃNG LAI
         if (!MaKH) {
-            const reqGenID = new sql.Request(transaction);
-            const idResult = await reqGenID.query(`SELECT TOP 1 MaKH AS maxId FROM KHACH_HANG WHERE MaKH LIKE 'KH%' ORDER BY MaKH DESC`);
-            let newMaKH = 'KH001';
-            if (idResult.recordset.length > 0) newMaKH = 'KH' + String(parseInt(idResult.recordset[0].maxId.replace('KH',''), 10)+1).padStart(3, '0');
-            
-            const reqInsertKH = new sql.Request(transaction);
-            await reqInsertKH
-                .input('MaKH', sql.VarChar, newMaKH).input('TenKH', sql.NVarChar, 'Khách Vãng Lai').input('DiaChi', sql.NVarChar, ddInfo.recordset[0].DiaChiFull)
-                .query(`INSERT INTO KHACH_HANG(MaKH, TenKH, DiaChi) VALUES(@MaKH, @TenKH, @DiaChi)`);
-            MaKH = newMaKH;
-        }
+            // Kiểm tra xem trong DB đã có "Khách Vãng Lai" chưa
+            const reqCheck = new sql.Request(transaction);
+            const checkResult = await reqCheck.query(`SELECT TOP 1 MaKH FROM KHACH_HANG WHERE TenKH = N'Khách Vãng Lai'`);
 
+            if (checkResult.recordset.length > 0) {
+                // Nếu ĐÃ CÓ, lấy mã đó xài luôn (Tránh tạo rác DB và lỗi UNIQUE)
+                MaKH = checkResult.recordset[0].MaKH;
+            } else {
+                // Nếu CHƯA CÓ, mới tạo 1 ông Khách Vãng Lai duy nhất cho hệ thống
+                const reqGenID = new sql.Request(transaction);
+                const idResult = await reqGenID.query(`SELECT TOP 1 MaKH AS maxId FROM KHACH_HANG WHERE MaKH LIKE 'KH%' ORDER BY MaKH DESC`);
+                let newMaKH = 'KH001';
+                if (idResult.recordset.length > 0) {
+                    newMaKH = 'KH' + String(parseInt(idResult.recordset[0].maxId.replace('KH',''), 10)+1).padStart(3, '0');
+                }
+                
+                const reqInsertKH = new sql.Request(transaction);
+                await reqInsertKH
+                    .input('MaKH', sql.VarChar, newMaKH)
+                    .input('TenKH', sql.NVarChar, 'Khách Vãng Lai')
+                    .input('DiaChi', sql.NVarChar, ddInfo.recordset[0].DiaChiFull)
+                    .query(`INSERT INTO KHACH_HANG(MaKH, TenKH, DiaChi) VALUES(@MaKH, @TenKH, @DiaChi)`);
+                MaKH = newMaKH;
+            }
+        }
         // 3. LƯU ĐƠN HÀNG (DON_HANG)
         const reqDH = new sql.Request(transaction);
         await reqDH
