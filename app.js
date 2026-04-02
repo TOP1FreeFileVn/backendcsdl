@@ -143,7 +143,27 @@ app.get('/api/pos/sanpham', (req, res) => {
         GROUP BY SP.MaSP, SP.Ten, SP.DonGia HAVING ISNULL(SUM(TK.SoLuong), 0) > 0
     `);
 });
+// 7. KHU VỰC
+app.get('/api/khuvuc', (req, res) => executeQuery(res, 'SELECT * FROM KHU_VUC'));
+app.post('/api/khuvuc', async (req, res) => {
+    try { const id = await generateId('KHU_VUC', 'MaKhu', 'KV'); await executeQuery(res, 'INSERT INTO KHU_VUC(MaKhu, TenKhu, MaDD) VALUES(@id, @ten, @madd)', [{name:'id', value:id}, {name:'ten', value:req.body.TenKhu}, {name:'madd', value:req.body.MaDD}]); } catch(e) { res.status(500).json({error:e.message}); }
+});
+app.put('/api/khuvuc/:id', (req, res) => executeQuery(res, 'UPDATE KHU_VUC SET TenKhu=@ten, MaDD=@madd WHERE MaKhu=@id', [{name:'id', value:req.params.id}, {name:'ten', value:req.body.TenKhu}, {name:'madd', value:req.body.MaDD}]));
+app.delete('/api/khuvuc/:id', (req, res) => executeQuery(res, 'DELETE FROM KHU_VUC WHERE MaKhu=@id', [{name:'id', value:req.params.id}]));
 
+// 8. KỆ HÀNG
+app.get('/api/kehang', (req, res) => executeQuery(res, 'SELECT * FROM KE_HANG'));
+app.post('/api/kehang', async (req, res) => {
+    try { const id = await generateId('KE_HANG', 'MaKe', 'KE'); await executeQuery(res, 'INSERT INTO KE_HANG(MaKe, TenKe, SucChua, SoTang, MaKhu) VALUES(@id, @ten, @suc, @tang, @makhu)', [{name:'id', value:id}, {name:'ten', value:req.body.TenKe}, {name:'suc', value:req.body.SucChua}, {name:'tang', value:req.body.SoTang}, {name:'makhu', value:req.body.MaKhu}]); } catch(e) { res.status(500).json({error:e.message}); }
+});
+app.put('/api/kehang/:id', (req, res) => executeQuery(res, 'UPDATE KE_HANG SET TenKe=@ten, SucChua=@suc, SoTang=@tang, MaKhu=@makhu WHERE MaKe=@id', [{name:'id', value:req.params.id}, {name:'ten', value:req.body.TenKe}, {name:'suc', value:req.body.SucChua}, {name:'tang', value:req.body.SoTang}, {name:'makhu', value:req.body.MaKhu}]));
+app.delete('/api/kehang/:id', (req, res) => executeQuery(res, 'DELETE FROM KE_HANG WHERE MaKe=@id', [{name:'id', value:req.params.id}]));
+
+// 9. TỒN KHO (Dùng để Khởi tạo hàng mẫu)
+app.get('/api/tonkho', (req, res) => executeQuery(res, 'SELECT * FROM TON_KHO'));
+app.post('/api/tonkho', (req, res) => executeQuery(res, 'INSERT INTO TON_KHO(MaSP, MaKe, SoLuong) VALUES(@masp, @make, @sl)', [{name:'masp', value:req.body.MaSP}, {name:'make', value:req.body.MaKe}, {name:'sl', value:req.body.SoLuong}]));
+app.put('/api/tonkho/:id', (req, res) => executeQuery(res, 'UPDATE TON_KHO SET SoLuong=@sl WHERE MaSP=@id AND MaKe=@make', [{name:'sl', value:req.body.SoLuong}, {name:'id', value:req.params.id}, {name:'make', value:req.body.MaKe}]));
+app.delete('/api/tonkho/:id', (req, res) => executeQuery(res, 'DELETE FROM TON_KHO WHERE MaSP=@id', [{name:'id', value:req.params.id}]));
 // ==========================================
 // NGHIỆP VỤ BÁN HÀNG (CỰC KỲ PHỨC TẠP BỞI 3NF)
 // ==========================================
